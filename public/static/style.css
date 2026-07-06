@@ -363,6 +363,117 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* =====================================================================
+   LOBBY SCREEN
+   ===================================================================== */
+
+.rules-panel, .names-panel {
+  max-width: 900px;
+  margin: 0 auto 22px;
+  padding: 28px 30px;
+}
+
+.rules-title {
+  font-family: var(--font-head);
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-main);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rules-title i { color: var(--rust-light); }
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.rule-item {
+  display: flex;
+  gap: 12px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.rule-item > i {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rust-light), var(--rust));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rule-h {
+  font-family: var(--font-head);
+  font-size: 13.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-main);
+  margin-bottom: 5px;
+}
+
+.rule-t {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.names-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.name-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.name-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  color: var(--rust-light);
+  font-family: var(--font-head);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.name-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 8px 2px;
+  min-width: 0;
+}
+.name-input:focus { outline: none; }
+.name-input::placeholder { color: var(--text-faint); }
+
+/* =====================================================================
    CATASTROPHE REVEAL SCREEN
    ===================================================================== */
 
@@ -903,6 +1014,173 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   justify-content: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Peek (приватная карточка) */
+.peek-box {
+  max-width: 540px;
+  position: relative;
+}
+
+.peek-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--rust);
+  color: #fff;
+  font-family: var(--font-head);
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 14px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.peek-box h3 { margin-top: 6px; }
+
+.peek-list {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.peek-row {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.peek-label {
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--rust-light);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.peek-label i { width: 14px; }
+
+.peek-value {
+  font-size: 13.5px;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.peek-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+/* Situation modal */
+.situation-box { max-width: 560px; }
+
+.situation-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-rust);
+  color: var(--rust-light);
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border-radius: 20px;
+  margin-bottom: 16px;
+}
+
+.situation-text {
+  font-size: 15px;
+  color: var(--text-main);
+  line-height: 1.7;
+  text-align: left;
+}
+
+/* Voting modal */
+.voting-box { max-width: 560px; }
+
+.voting-list {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.voting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.voting-name {
+  font-size: 13.5px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.voting-name i { color: var(--rust-light); }
+
+.voting-prof {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.voting-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.vote-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-metal);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+.vote-btn:hover { border-color: var(--danger); color: var(--danger-light); }
+
+.vote-count {
+  min-width: 22px;
+  text-align: center;
+  font-family: var(--font-head);
+  font-size: 16px;
+  color: var(--warning);
 }
 
 /* =====================================================================

@@ -5,6 +5,7 @@ import {
   randomCatastrophe,
   randomBunkerParams,
   randomEvent,
+  randomSituation,
 } from './data'
 
 const app = new Hono()
@@ -19,10 +20,11 @@ app.use(renderer)
 app.post('/api/game/new', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const count = Math.min(Math.max(Number(body?.playerCount) || 8, 4), 16)
+  const names: string[] = Array.isArray(body?.names) ? body.names.slice(0, count) : []
 
   const catastrophe = randomCatastrophe()
   const bunker = randomBunkerParams()
-  const players = generatePlayers(count)
+  const players = generatePlayers(count, names)
 
   return c.json({ catastrophe, bunker, players })
 })
@@ -60,6 +62,11 @@ app.post('/api/game/reroll', async (c) => {
 // Новое случайное событие раунда
 app.get('/api/game/event', (c) => {
   return c.json({ event: randomEvent() })
+})
+
+// Новая случайная ситуация (для озвучивания вслух в любой момент)
+app.get('/api/game/situation', (c) => {
+  return c.json({ situation: randomSituation() })
 })
 
 // Новая катастрофа (на случай если ведущий хочет пересоздать только её)

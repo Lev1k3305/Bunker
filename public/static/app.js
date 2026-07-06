@@ -5,7 +5,8 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'bunker_game_state_v1';
+  const STORAGE_KEY = 'bunker_game_state_v2';
+  const VOTING_ROUND_THRESHOLD = 3;
 
   const ATTR_FIELDS = [
     { key: 'ageGender', label: 'Возраст / пол', icon: 'fa-id-card' },
@@ -64,9 +65,12 @@
   }
 
   function renderCurrentScreen() {
-    if (!state || state.screen === 'setup') renderSetupScreen();
+    if (!state) return;
+    if (state.screen === 'setup') renderSetupScreen();
+    else if (state.screen === 'lobby') renderLobbyScreen();
     else if (state.screen === 'catastrophe') renderCatastropheScreen();
     else if (state.screen === 'game') renderGameScreen();
+    else renderSetupScreen();
   }
 
   // -------------------------------------------------------------------
@@ -95,15 +99,17 @@
             <div class="setup-field">
               <label>Как это работает</label>
               <div class="setup-hint">
-                1. Генерируется случайная катастрофа и параметры бункера.<br/>
-                2. Каждый игрок получает секретное досье: профессия, возраст, здоровье, фобия, хобби, черты характера, инвентарь.<br/>
-                3. По раундам игроки раскрывают характеристики и голосованием решают, кого исключить из бункера — мест на всех не хватит!
+                1. В лобби каждый игрок вписывает своё имя, и ведущий подробно объясняет правила.<br/>
+                2. Генерируется случайная катастрофа и параметры бункера.<br/>
+                3. Каждый получает секретное досье: профессия, возраст, здоровье, фобия, хобби, черты характера, инвентарь.<br/>
+                4. По раундам игроки раскрывают характеристики, обсуждают и озвучивают ситуации.<br/>
+                5. Начиная с 3-го раунда открывается голосование — сообщество решает, кого исключить из бункера.
               </div>
             </div>
 
             <div class="setup-actions">
               <button class="btn btn-primary" id="start-btn">
-                <i class="fa-solid fa-door-closed"></i> Начать катастрофу
+                <i class="fa-solid fa-people-roof"></i> Далее: лобби
               </button>
             </div>
           </div>
@@ -120,16 +126,131 @@
       state.playerCount = Number(slider.value);
     });
 
-    document.getElementById('start-btn').addEventListener('click', startNewGame);
+    document.getElementById('start-btn').addEventListener('click', goToLobby);
+  }
+
+  function goToLobby() {
+    const count = state.playerCount || 8;
+    const existingNames = (state.names && state.names.length === count) ? state.names : null;
+    const names = existingNames || Array.from({ length: count }, (_, i) => '');
+    state = { screen: 'lobby', playerCount: count, names };
+    saveState();
+    renderCurrentScreen();
+  }
+
+  // -------------------------------------------------------------------
+  // ЭКРАН ЛОББИ
+  // -------------------------------------------------------------------
+
+  function renderLobbyScreen() {
+    const names = state.names || [];
+    appEl.innerHTML = `
+      <div class="screen">
+        <div class="container">
+          <div class="top-title">
+            <i class="fa-solid fa-people-roof"></i>
+            <h1>ЛОББИ</h1>
+          </div>
+          <div class="subtitle">знакомство перед спуском<span class="divider"></span>${names.length} мест в бункере</div>
+
+          <div class="panel rules-panel">
+            <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
+            <div class="rules-grid">
+              <div class="rule-item">
+                <i class="fa-solid fa-1"></i>
+                <div>
+                  <div class="rule-h">Катастрофа и бункер</div>
+                  <div class="rule-t">Ведущий объявляет катастрофу, уничтожившую мир на поверхности, и параметры бункера: площадь, срок пребывания, этажность, запасы. Мест на всех не хватит.</div>
+                </div>
+              </div>
+              <div class="rule-item">
+                <i class="fa-solid fa-2"></i>
+                <div>
+                  <div class="rule-h">Секретное досье</div>
+                  <div class="rule-t">Каждый получает карточку: профессия (видна сразу), возраст и пол, здоровье, фобия, хобби, черты характера, инвентарь и доп. информация — всё это до поры скрыто от остальных.</div>
+                </div>
+              </div>
+              <div class="rule-item">
+                <i class="fa-solid fa-3"></i>
+                <div>
+                  <div class="rule-h">Раунды и раскрытие</div>
+                  <div class="rule-t">В каждом раунде игроки по очереди раскрывают по одной характеристике (или больше) и подробно рассказывают о себе, чтобы убедить остальных оставить их в бункере.</div>
+                </div>
+              </div>
+              <div class="rule-item">
+                <i class="fa-solid fa-4"></i>
+                <div>
+                  <div class="rule-h">Ситуации</div>
+                  <div class="rule-t">Ведущий периодически озвучивает случайные ситуации и происшествия в бункере — их нужно обсудить и принять решение сообща.</div>
+                </div>
+              </div>
+              <div class="rule-item">
+                <i class="fa-solid fa-5"></i>
+                <div>
+                  <div class="rule-h">Голосование</div>
+                  <div class="rule-t">Начиная с 3-го раунда открывается голосование: все решают, кто покинет бункер. Исключённый выбывает из игры.</div>
+                </div>
+              </div>
+              <div class="rule-item">
+                <i class="fa-solid fa-6"></i>
+                <div>
+                  <div class="rule-h">Победа</div>
+                  <div class="rule-t">Игра продолжается до тех пор, пока не останется ровно столько выживших, сколько мест в бункере — именно они и побеждают.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel names-panel">
+            <div class="rules-title"><i class="fa-solid fa-signature"></i> Представление игроков</div>
+            <div class="setup-hint" style="margin-bottom:18px;">Впишите имена всех участников (или оставьте поле пустым — тогда игрок будет назван «Игрок N»). Каждый сможет в любой момент приватно посмотреть своё полное досье кнопкой с иконкой глаза на карточке.</div>
+            <div class="names-grid" id="names-grid">
+              ${names.map((n, i) => `
+                <div class="name-field">
+                  <div class="name-num">${i + 1}</div>
+                  <input type="text" class="name-input" id="lobby-name-${i}" placeholder="Игрок ${i + 1}" maxlength="24" value="${escapeHtml(n || '')}" />
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="catastrophe-actions">
+            <button class="btn btn-secondary" id="lobby-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+            <button class="btn btn-primary" id="lobby-start-btn"><i class="fa-solid fa-door-closed"></i> Начать катастрофу</button>
+          </div>
+
+          <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
+        </div>
+      </div>
+    `;
+
+    names.forEach((_, i) => {
+      const input = document.getElementById(`lobby-name-${i}`);
+      input.addEventListener('input', () => {
+        state.names[i] = input.value;
+        saveState();
+      });
+    });
+
+    document.getElementById('lobby-back-btn').addEventListener('click', () => {
+      state.screen = 'setup';
+      saveState();
+      renderCurrentScreen();
+    });
+
+    document.getElementById('lobby-start-btn').addEventListener('click', startNewGame);
   }
 
   async function startNewGame() {
-    const btn = document.getElementById('start-btn');
+    const btn = document.getElementById('lobby-start-btn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Генерация катастрофы...';
 
     try {
-      const res = await axios.post('/api/game/new', { playerCount: state.playerCount });
+      const res = await axios.post('/api/game/new', {
+        playerCount: state.playerCount,
+        names: state.names,
+      });
       const { catastrophe, bunker, players } = res.data;
 
       const preparedPlayers = players.map((p) => ({
@@ -141,11 +262,12 @@
       state = {
         screen: 'catastrophe',
         playerCount: state.playerCount,
+        names: state.names,
         catastrophe,
         bunker,
         players: preparedPlayers,
-        round: 0,
-        events: [],
+        round: 1,
+        situationsLog: [],
       };
       saveState();
       renderCurrentScreen();
@@ -194,6 +316,7 @@
           </div>
 
           <div class="catastrophe-actions">
+            <button class="btn btn-secondary" id="lobby-return-btn"><i class="fa-solid fa-arrow-left"></i> В лобби</button>
             <button class="btn btn-secondary" id="reroll-catastrophe"><i class="fa-solid fa-rotate"></i> Другая катастрофа</button>
             <button class="btn btn-secondary" id="reroll-bunker"><i class="fa-solid fa-rotate"></i> Другой бункер</button>
             <button class="btn btn-primary" id="enter-bunker"><i class="fa-solid fa-people-group"></i> Спуститься в бункер</button>
@@ -202,6 +325,12 @@
         <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
       </div>
     `;
+
+    document.getElementById('lobby-return-btn').addEventListener('click', () => {
+      state.screen = 'lobby';
+      saveState();
+      renderCurrentScreen();
+    });
 
     document.getElementById('reroll-catastrophe').addEventListener('click', async () => {
       const res = await axios.get('/api/game/catastrophe');
@@ -233,6 +362,7 @@
     const aliveCount = players.filter((p) => !p.excluded).length;
     const totalCount = players.length;
     const pct = Math.min(100, Math.round((aliveCount / totalCount) * 100));
+    const votingUnlocked = round >= VOTING_ROUND_THRESHOLD;
 
     appEl.innerHTML = `
       <div class="screen" style="padding-top:0;">
@@ -240,6 +370,10 @@
           <div class="brand"><i class="fa-solid fa-radiation"></i> БУНКЕР</div>
           <div class="round-badge"><i class="fa-solid fa-hourglass-half"></i> Раунд ${round}</div>
           <div class="topbar-actions">
+            <button class="btn btn-secondary" id="situation-btn"><i class="fa-solid fa-triangle-exclamation"></i> Ситуация</button>
+            <button class="btn ${votingUnlocked ? 'btn-danger' : 'btn-secondary'}" id="voting-btn" ${votingUnlocked ? '' : 'title="Голосование откроется с 3-го раунда"'}>
+              <i class="fa-solid fa-square-poll-vertical"></i> Голосование ${votingUnlocked ? '' : `<i class="fa-solid fa-lock" style="font-size:11px;margin-left:4px;"></i>`}
+            </button>
             <button class="btn btn-secondary" id="next-round-btn"><i class="fa-solid fa-forward"></i> Следующий раунд</button>
             <button class="btn btn-ghost" id="new-game-btn"><i class="fa-solid fa-rotate-left"></i> Новая игра</button>
           </div>
@@ -248,7 +382,7 @@
         <div class="survivors-bar-wrap">
           <div class="survivors-bar-label">
             <span><i class="fa-solid fa-people-roof"></i> Выживших в бункере: ${aliveCount} / ${totalCount}</span>
-            <span>${pct}%</span>
+            <span>${votingUnlocked ? '<i class="fa-solid fa-unlock" style="color:var(--toxic);"></i> Голосование доступно' : `Голосование откроется в раунде ${VOTING_ROUND_THRESHOLD}`}</span>
           </div>
           <div class="survivors-bar">
             <div class="survivors-bar-fill ${pct < 40 ? 'over' : ''}" style="width:${pct}%"></div>
@@ -285,8 +419,10 @@
 
     document.getElementById('next-round-btn').addEventListener('click', handleNextRound);
     document.getElementById('new-game-btn').addEventListener('click', handleNewGameClick);
+    document.getElementById('situation-btn').addEventListener('click', handleShowSituation);
+    document.getElementById('voting-btn').addEventListener('click', () => handleOpenVoting(votingUnlocked));
 
-    // Player name inputs
+    // Player name inputs & actions
     players.forEach((p) => {
       const nameInput = document.getElementById(`name-${p.id}`);
       if (nameInput) {
@@ -299,6 +435,11 @@
       const excludeBtn = document.getElementById(`exclude-${p.id}`);
       if (excludeBtn) {
         excludeBtn.addEventListener('click', () => toggleExclude(p.id));
+      }
+
+      const peekBtn = document.getElementById(`peek-${p.id}`);
+      if (peekBtn) {
+        peekBtn.addEventListener('click', () => openPeekModal(p.id));
       }
 
       ATTR_FIELDS.forEach((f) => {
@@ -328,6 +469,9 @@
           <div class="player-avatar">${initial}</div>
           <input class="player-name-input" id="name-${p.id}" value="${escapeHtml(p.name)}" maxlength="24" />
           <div class="player-card-actions">
+            <button class="icon-toggle" id="peek-${p.id}" title="Приватный просмотр — полное досье для тебя">
+              <i class="fa-solid fa-eye"></i>
+            </button>
             <button class="icon-toggle ${p.excluded ? 'active' : ''}" id="exclude-${p.id}" title="Исключить/вернуть">
               <i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i>
             </button>
@@ -384,7 +528,6 @@
       row.classList.add('just-revealed');
       setTimeout(() => row.classList.remove('just-revealed'), 400);
     }
-    // Re-render the head part to swap lock/reroll icon
     const head = document.getElementById(`attr-head-${playerId}-${field}`);
     if (head) {
       const f = ATTR_FIELDS.find((x) => x.key === field);
@@ -446,11 +589,63 @@
     renderGameScreen();
   }
 
+  // -------------------------------------------------------------------
+  // ПРИВАТНЫЙ ПРОСМОТР СВОЕЙ КАРТОЧКИ («раскрыта для тебя»)
+  // -------------------------------------------------------------------
+
+  function openPeekModal(playerId) {
+    const p = state.players.find((x) => x.id === playerId);
+    if (!p) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box peek-box">
+        <div class="peek-badge"><i class="fa-solid fa-user-lock"></i> Только для тебя</div>
+        <i class="fa-solid fa-id-badge modal-icon" style="color:var(--rust-light);"></i>
+        <h3>${escapeHtml(p.name)}</h3>
+        <div class="peek-list">
+          <div class="peek-row">
+            <div class="peek-label"><i class="fa-solid fa-briefcase"></i>Профессия</div>
+            <div class="peek-value">${p.profession}</div>
+          </div>
+          ${ATTR_FIELDS.map((f) => `
+            <div class="peek-row">
+              <div class="peek-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
+              <div class="peek-value">${p[f.key]}</div>
+            </div>
+          `).join('')}
+        </div>
+        <p class="peek-hint">Эта информация видна только тебе. Остальным игрокам характеристики по-прежнему открываются через карточку по одной за раунд.</p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="peek-close-btn"><i class="fa-solid fa-eye-slash"></i> Спрятать</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('peek-close-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // РАУНДЫ И СОБЫТИЯ
+  // -------------------------------------------------------------------
+
   async function handleNextRound() {
     state.round += 1;
     saveState();
 
-    document.querySelector('.round-badge').innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Раунд ${state.round}`;
+    const badge = document.querySelector('.round-badge');
+    if (badge) badge.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Раунд ${state.round}`;
+
+    if (state.round === VOTING_ROUND_THRESHOLD) {
+      showToast('Голосование открыто', 'С этого раунда доступно голосование за исключение игрока.', 'fa-square-poll-vertical');
+    }
+
+    // Обновляем кнопку голосования и подсказку без полной перерисовки
+    renderGameScreen();
 
     try {
       const res = await axios.get('/api/game/event');
@@ -481,6 +676,193 @@
       if (e.target === overlay) overlay.remove();
     });
   }
+
+  // -------------------------------------------------------------------
+  // СИТУАЦИИ (для озвучивания вслух)
+  // -------------------------------------------------------------------
+
+  async function handleShowSituation() {
+    const btn = document.getElementById('situation-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Загрузка...';
+    }
+    try {
+      const res = await axios.get('/api/game/situation');
+      const s = res.data.situation;
+      if (!state.situationsLog) state.situationsLog = [];
+      state.situationsLog.push({ round: state.round, title: s.title });
+      saveState();
+      showSituationModal(s);
+    } catch (e) {
+      showToast('Ошибка', 'Не удалось загрузить ситуацию.', 'fa-triangle-exclamation');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Ситуация';
+      }
+    }
+  }
+
+  function showSituationModal(s) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box situation-box">
+        <div class="situation-category"><i class="fa-solid ${s.icon}"></i> ${escapeHtml(s.category)}</div>
+        <h3>${escapeHtml(s.title)}</h3>
+        <p class="situation-text">${escapeHtml(s.text)}</p>
+        <div class="setup-hint" style="margin-bottom:18px;">Озвучьте эту ситуацию вслух всем участникам и обсудите, как бункер будет действовать.</div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="situation-again-btn"><i class="fa-solid fa-rotate"></i> Другая ситуация</button>
+          <button class="btn btn-primary" id="situation-close-btn"><i class="fa-solid fa-check"></i> Обсудили</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('situation-close-btn').addEventListener('click', () => overlay.remove());
+    document.getElementById('situation-again-btn').addEventListener('click', async () => {
+      const res = await axios.get('/api/game/situation');
+      overlay.remove();
+      showSituationModal(res.data.situation);
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // ГОЛОСОВАНИЕ (доступно с 3-го раунда)
+  // -------------------------------------------------------------------
+
+  function handleOpenVoting(unlocked) {
+    if (!unlocked) {
+      showToast('Голосование закрыто', `Голосование откроется начиная с ${VOTING_ROUND_THRESHOLD}-го раунда. Сейчас раунд ${state.round}.`, 'fa-lock');
+      return;
+    }
+    openVotingModal();
+  }
+
+  function openVotingModal() {
+    const alive = state.players.filter((p) => !p.excluded);
+    const votes = {};
+    alive.forEach((p) => { votes[p.id] = 0; });
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box voting-box">
+        <i class="fa-solid fa-square-poll-vertical modal-icon" style="color:var(--danger-light);"></i>
+        <h3>Голосование — раунд ${state.round}</h3>
+        <p>Отмечайте голоса за каждого выжившего. Кандидат с наибольшим числом голосов будет исключён из бункера.</p>
+        <div class="voting-list" id="voting-list">
+          ${alive.map((p) => `
+            <div class="voting-row" id="voting-row-${p.id}">
+              <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)} <span class="voting-prof">— ${p.profession}</span></div>
+              <div class="voting-controls">
+                <button class="vote-btn vote-minus" data-id="${p.id}"><i class="fa-solid fa-minus"></i></button>
+                <span class="vote-count" id="vote-count-${p.id}">0</span>
+                <button class="vote-btn vote-plus" data-id="${p.id}"><i class="fa-solid fa-plus"></i></button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="voting-cancel-btn">Отмена</button>
+          <button class="btn btn-danger" id="voting-confirm-btn"><i class="fa-solid fa-user-slash"></i> Исключить лидера голосования</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelectorAll('.vote-plus').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.id);
+        votes[id] += 1;
+        document.getElementById(`vote-count-${id}`).textContent = votes[id];
+      });
+    });
+    overlay.querySelectorAll('.vote-minus').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.id);
+        votes[id] = Math.max(0, votes[id] - 1);
+        document.getElementById(`vote-count-${id}`).textContent = votes[id];
+      });
+    });
+
+    document.getElementById('voting-cancel-btn').addEventListener('click', () => overlay.remove());
+
+    document.getElementById('voting-confirm-btn').addEventListener('click', () => {
+      const entries = Object.entries(votes);
+      const maxVotes = Math.max(...entries.map(([, v]) => v));
+      if (maxVotes <= 0) {
+        showToast('Нет голосов', 'Отметьте хотя бы один голос перед завершением голосования.', 'fa-triangle-exclamation');
+        return;
+      }
+      const leaders = entries.filter(([, v]) => v === maxVotes).map(([id]) => Number(id));
+
+      overlay.remove();
+
+      if (leaders.length > 1) {
+        showTieModal(leaders, votes);
+      } else {
+        excludePlayer(leaders[0]);
+      }
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  function showTieModal(leaderIds, votes) {
+    const candidates = state.players.filter((p) => leaderIds.includes(p.id));
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box">
+        <i class="fa-solid fa-scale-balanced modal-icon" style="color:var(--warning);"></i>
+        <h3>Ничья в голосовании!</h3>
+        <p>Несколько игроков набрали одинаковое максимальное число голосов (${votes[leaderIds[0]]}). Выберите, кто покидает бункер, по итогам дополнительного обсуждения или переголосования.</p>
+        <div class="voting-list">
+          ${candidates.map((p) => `
+            <div class="voting-row">
+              <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)} <span class="voting-prof">— ${p.profession}</span></div>
+              <button class="btn btn-danger" data-tie-id="${p.id}" style="padding:8px 16px;font-size:12px;">Исключить</button>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="tie-cancel-btn">Никого не исключать</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-tie-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.tieId);
+        overlay.remove();
+        excludePlayer(id);
+      });
+    });
+    document.getElementById('tie-cancel-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  function excludePlayer(playerId) {
+    const p = state.players.find((x) => x.id === playerId);
+    if (!p) return;
+    p.excluded = true;
+    saveState();
+    renderGameScreen();
+    showToast('Голосование завершено', `${p.name} исключён(а) из бункера по итогам голосования.`, 'fa-user-slash');
+  }
+
+  // -------------------------------------------------------------------
+  // НОВАЯ ИГРА
+  // -------------------------------------------------------------------
 
   function handleNewGameClick() {
     const overlay = document.createElement('div');
