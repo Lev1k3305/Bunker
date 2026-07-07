@@ -12,6 +12,22 @@
       "database_name": "webapp-production",
       "database_id": "local-placeholder-id"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS",
+        "class_name": "GameRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": [
+        "GameRoom"
+      ]
+    }
   ]
   // "vars": {
   //   "MY_VAR": "my-variable"

@@ -1,8 +1,12 @@
 import { Hono } from 'hono'
 import { renderer } from './renderer'
 import { rooms } from './rooms'
+import { GameRoom } from './gameDO'
 
-type Bindings = { DB: D1Database }
+type Bindings = {
+  DB: D1Database,
+  ROOMS: DurableObjectNamespace<GameRoom>
+}
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -31,4 +35,5 @@ app.get('/', (c) => {
   )
 })
 
+export { GameRoom }
 export default app
