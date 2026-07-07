@@ -1,83 +1,18 @@
 import { Hono } from 'hono'
 import { renderer } from './renderer'
-import {
-  generatePlayers,
-  randomCatastrophe,
-  randomBunkerParams,
-  randomEvent,
-  randomSituation,
-} from './data'
+import { rooms } from './rooms'
 
-const app = new Hono()
+type Bindings = { DB: D1Database }
+
+const app = new Hono<{ Bindings: Bindings }>()
 
 app.use(renderer)
 
 // ---------------------------------------------------------------------
-// API
+// Multiplayer API (комнаты, игроки, голосование, чат)
 // ---------------------------------------------------------------------
 
-// Сгенерировать полную новую игру: катастрофа + бункер + игроки
-app.post('/api/game/new', async (c) => {
-  const body = await c.req.json().catch(() => ({}))
-  const count = Math.min(Math.max(Number(body?.playerCount) || 8, 4), 16)
-  const names: string[] = Array.isArray(body?.names) ? body.names.slice(0, count) : []
-
-  const catastrophe = randomCatastrophe()
-  const bunker = randomBunkerParams()
-  const players = generatePlayers(count, names)
-
-  return c.json({ catastrophe, bunker, players })
-})
-
-// Перегенерировать одну характеристику одного игрока
-app.post('/api/game/reroll', async (c) => {
-  const body = await c.req.json().catch(() => ({}))
-  const field = body?.field as string
-
-  const {
-    PROFESSIONS, AGE_GENDER, HEALTH, HOBBIES, PHOBIAS,
-    TRAITS_POSITIVE, TRAITS_NEGATIVE, INVENTORY, EXTRA_INFO, pick,
-  } = await import('./data')
-
-  const map: Record<string, string[]> = {
-    profession: PROFESSIONS,
-    ageGender: AGE_GENDER,
-    health: HEALTH,
-    hobby: HOBBIES,
-    phobia: PHOBIAS,
-    traitPositive: TRAITS_POSITIVE,
-    traitNegative: TRAITS_NEGATIVE,
-    inventory: INVENTORY,
-    extraInfo: EXTRA_INFO,
-  }
-
-  const list = map[field]
-  if (!list) {
-    return c.json({ error: 'unknown field' }, 400)
-  }
-
-  return c.json({ value: pick(list) })
-})
-
-// Новое случайное событие раунда
-app.get('/api/game/event', (c) => {
-  return c.json({ event: randomEvent() })
-})
-
-// Новая случайная ситуация (для озвучивания вслух в любой момент)
-app.get('/api/game/situation', (c) => {
-  return c.json({ situation: randomSituation() })
-})
-
-// Новая катастрофа (на случай если ведущий хочет пересоздать только её)
-app.get('/api/game/catastrophe', (c) => {
-  return c.json({ catastrophe: randomCatastrophe() })
-})
-
-// Новые параметры бункера
-app.get('/api/game/bunker', (c) => {
-  return c.json({ bunker: randomBunkerParams() })
-})
+app.route('/api/room', rooms)
 
 // ---------------------------------------------------------------------
 // Главная страница (SPA-оболочка)
