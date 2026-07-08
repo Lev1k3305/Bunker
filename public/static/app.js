@@ -1,12 +1,13 @@
 // =====================================================================
-// БУНКЕР — клиентское приложение
+// БУНКЕР — клиентское мультиплеерное приложение (комнаты, реальные игроки)
 // =====================================================================
 
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'bunker_game_state_v2';
-  const VOTING_ROUND_THRESHOLD = 3;
+  const SESSION_KEY = 'bunker_mp_session_v1';
+  const POLL_INTERVAL = 2500;
+  const API_BASE = '/api/room';
 
   const ATTR_FIELDS = [
     { key: 'ageGender', label: 'Возраст / пол', icon: 'fa-id-card' },
@@ -19,21 +20,72 @@
     { key: 'extraInfo', label: 'Доп. информация', icon: 'fa-file-lines' },
   ];
 
-  let state = null;
-  const appEl = document.getElementById('app');
+  const ERROR_MESSAGES = {
+    room_not_found: 'Комната не найдена. Проверьте код.',
+    slot_not_found: 'Такого места не существует.',
+    slot_taken: 'Это место уже занято другим игроком.',
+    only_host: 'Это действие доступно только хосту комнаты.',
+    only_host_can_start: 'Начать игру может только хост.',
+    not_enough_players: 'Нужно минимум 2 занятых места, чтобы начать игру.',
+    bad_field: 'Некорректное поле характеристики.',
+    not_joined: 'Вы ещё не заняли место в этой комнате.',
+    already_revealed: 'Нельзя перебросить уже раскрытую характеристику.',
+    voting_locked: 'Голосование ещё не открыто.',
+    vote_already_active: 'Голосование уже идёт.',
+    no_active_vote: 'Сейчас нет активного голосования.',
+    vote_expired: 'Время голосования истекло.',
+    target_not_found: 'Выбранный игрок не найден.',
+    excluded_cannot_vote: 'Исключённые игроки не могут голосовать.',
+    empty_message: 'Сообщение не может быть пустым.',
+    only_host_or_expired: 'Завершить голосование раньше времени может только хост.',
+    player_not_found: 'Игрок не найден.',
+  };
 
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Состояние клиента
+  // ---------------------------------------------------------------------
+
+  let session = getSession();           // { code, token } | null
+  let lastData = null;                  // последний ответ /state
+  let currentView = null;               // home | seat-select | lobby | catastrophe | game
+  let pollHandle = null;
+  let tickHandle = null;
+
+  let homeTab = 'create';
+  let createCount = 8;
+  let joinCodeDraft = '';
+  let pendingSlot = null;
+
+  let seenEventRound = null;
+  let seenSituationSig = undefined;
+  let lastKnownStatus = null;
+  let autoFinalizeInFlight = false;
+
+  const appEl = document.getElementById('app');
+  let toastContainer = null;
+
+  // ---------------------------------------------------------------------
   // Инициализация
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
 
   function init() {
-    const saved = loadState();
-    if (saved) {
-      state = saved;
-      renderCurrentScreen();
+    ensureToastContainer();
+
+    const params = new URLSearchParams(location.search);
+    const roomFromUrl = (params.get('room') || '').toUpperCase().trim();
+
+    if (session && session.code) {
+      startPolling();
+    } else if (roomFromUrl) {
+      homeTab = 'join';
+      joinCodeDraft = roomFromUrl;
+      renderHome();
     } else {
-      state = { screen: 'setup', playerCount: 8 };
-      renderCurrentScreen();
+      renderHome();
+    }
+
+    if (!tickHandle) {
+      tickHandle = setInterval(tick, 250);
     }
 
     setTimeout(() => {
@@ -42,108 +94,516 @@
     }, 500);
   }
 
-  function saveState() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) { /* ignore quota errors */ }
+  function ensureToastContainer() {
+    toastContainer = document.getElementById('global-toast-container');
+    if (!toastContainer) {
+      toastContainer = document.createElement('div');
+      toastContainer.className = 'toast-container';
+      toastContainer.id = 'global-toast-container';
+      document.body.appendChild(toastContainer);
+    }
   }
 
-  function loadState() {
+  // ---------------------------------------------------------------------
+  // Сессия (localStorage: только код комнаты + токен игрока)
+  // ---------------------------------------------------------------------
+
+  function getSession() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return null;
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.code) return null;
+      return parsed;
     } catch (e) {
       return null;
     }
   }
 
-  function resetGame() {
-    localStorage.removeItem(STORAGE_KEY);
-    state = { screen: 'setup', playerCount: 8 };
-    renderCurrentScreen();
+  function setSession(code, token) {
+    session = { code: (code || '').toUpperCase(), token: token || null };
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) { /* ignore */ }
   }
 
-  function renderCurrentScreen() {
-    if (!state) return;
-    if (state.screen === 'setup') renderSetupScreen();
-    else if (state.screen === 'lobby') renderLobbyScreen();
-    else if (state.screen === 'catastrophe') renderCatastropheScreen();
-    else if (state.screen === 'game') renderGameScreen();
-    else renderSetupScreen();
+  function clearSession() {
+    session = null;
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
   }
 
-  // -------------------------------------------------------------------
-  // ЭКРАН НАСТРОЙКИ
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // API helper
+  // ---------------------------------------------------------------------
 
-  function renderSetupScreen() {
-    const count = state.playerCount || 8;
+  async function api(method, path, body) {
+    const headers = {};
+    if (session && session.token) headers['X-Player-Token'] = session.token;
+    const res = await axios({ method, url: API_BASE + path, data: body, headers });
+    return res.data;
+  }
+
+  function errorMessageFrom(e) {
+    const code = e && e.response && e.response.data && e.response.data.error;
+    return ERROR_MESSAGES[code] || 'Что-то пошло не так. Попробуйте ещё раз.';
+  }
+
+  // ---------------------------------------------------------------------
+  // Поллинг состояния комнаты
+  // ---------------------------------------------------------------------
+
+  function stopPolling() {
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollOnce();
+    pollHandle = setInterval(pollOnce, POLL_INTERVAL);
+  }
+
+  async function pollOnce() {
+    if (!session || !session.code) return;
+    try {
+      const data = await api('get', `/${session.code}/state`);
+      lastData = data;
+      render();
+    } catch (e) {
+      const code = e && e.response && e.response.data && e.response.data.error;
+      if (code === 'room_not_found') {
+        showToast('Комната не найдена', 'Возможно, комната была удалена или код неверен.', 'fa-triangle-exclamation');
+        clearSession();
+        stopPolling();
+        lastData = null;
+        currentView = null;
+        renderHome();
+      }
+      // прочие ошибки — временный сбой сети, просто ждём следующий тик
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Сохранение значений полей ввода при полной перерисовке (чтобы не терять фокус/текст)
+  // ---------------------------------------------------------------------
+
+  function preserveInputs(ids) {
+    const out = {};
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        out[id] = {
+          value: el.value,
+          focused: document.activeElement === el,
+          selStart: el.selectionStart,
+          selEnd: el.selectionEnd,
+        };
+      }
+    });
+    return out;
+  }
+
+  function restoreInputs(vals) {
+    Object.entries(vals).forEach(([id, v]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = v.value;
+      if (v.focused) {
+        el.focus();
+        try { el.setSelectionRange(v.selStart, v.selEnd); } catch (e) { /* ignore */ }
+      }
+    });
+  }
+
+  function captureChatScroll() {
+    const el = document.getElementById('chat-messages');
+    if (!el) return null;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    return { atBottom, scrollTop: el.scrollTop };
+  }
+
+  function restoreChatScroll(saved) {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    if (!saved || saved.atBottom) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTop = saved.scrollTop;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Главный рендер-диспетчер
+  // ---------------------------------------------------------------------
+
+  function computeView(data) {
+    if (!session || !session.token) return 'seat-select';
+    if (!data || !data.room) return 'seat-select';
+    if (data.room.status === 'catastrophe') return 'catastrophe';
+    if (data.room.status === 'game' || data.room.status === 'ended') return 'game';
+    return 'lobby';
+  }
+
+  function render() {
+    const data = lastData;
+    const view = data ? computeView(data) : 'home';
+
+    if (data && data.room && data.room.status !== lastKnownStatus) {
+      if (data.room.status === 'catastrophe') {
+        seenEventRound = 0;
+        seenSituationSig = null;
+      }
+      lastKnownStatus = data.room.status;
+    }
+
+    currentView = view;
+
+    const preserved = preserveInputs(['seat-name-input', 'chat-input', 'join-code-input', 'discussion-seconds-input', 'voting-seconds-input']);
+    const chatScroll = captureChatScroll();
+
+    if (view === 'seat-select') renderSeatSelect(data);
+    else if (view === 'lobby') renderLobby(data);
+    else if (view === 'catastrophe') renderCatastrophe(data);
+    else if (view === 'game') renderGame(data);
+    else renderHome();
+
+    restoreInputs(preserved);
+    restoreChatScroll(chatScroll);
+
+    if (data) checkAutoModals(data);
+  }
+
+  function tick() {
+    document.querySelectorAll('[data-ends-at]').forEach((el) => {
+      const endsAt = Number(el.dataset.endsAt);
+      const remain = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+      el.textContent = formatCountdown(remain);
+      el.classList.toggle('urgent', remain <= 15 && remain > 0);
+      el.classList.toggle('expired', remain <= 0);
+    });
+    maybeAutoFinalizeVote();
+  }
+
+  function formatCountdown(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  async function maybeAutoFinalizeVote() {
+    if (!lastData || !lastData.voting || lastData.voting.status !== 'active') return;
+    if (!lastData.room || !lastData.me) return;
+    if (lastData.me.id !== lastData.room.hostPlayerId) return;
+    if (Number(lastData.voting.endsAt) > Date.now()) return;
+    if (autoFinalizeInFlight) return;
+    autoFinalizeInFlight = true;
+    try {
+      await api('post', `/${session.code}/vote/finalize`, {});
+      await pollOnce();
+    } catch (e) { /* ignore */ } finally {
+      autoFinalizeInFlight = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // ГЛАВНАЯ (создание / вход в комнату)
+  // ---------------------------------------------------------------------
+
+  function renderHome() {
+    currentView = 'home';
     appEl.innerHTML = `
-      <div class="screen" style="display:flex;align-items:center;justify-content:center;">
+      <div class="screen mp-home-screen">
         <div class="container">
           <div class="top-title">
             <i class="fa-solid fa-radiation"></i>
             <h1>БУНКЕР</h1>
           </div>
-          <div class="subtitle">игра на выживание<span class="divider"></span>кто останется жить?</div>
+          <div class="subtitle">сетевая игра на выживание<span class="divider"></span>каждый играет со своего устройства</div>
 
-          <div class="panel setup-panel">
-            <div class="stamp-corner">Секретно</div>
-            <div class="setup-field">
-              <label>Количество выживших: <span class="val" id="count-val">${count}</span></label>
-              <input type="range" id="player-count" min="4" max="16" step="1" value="${count}" />
-              <div class="setup-hint">Рекомендуется от 6 до 12 игроков для оптимального баланса катастрофы и вместимости бункера.</div>
-            </div>
-
-            <div class="setup-field">
-              <label>Как это работает</label>
-              <div class="setup-hint">
-                1. В лобби каждый игрок вписывает своё имя, и ведущий подробно объясняет правила.<br/>
-                2. Генерируется случайная катастрофа и параметры бункера.<br/>
-                3. Каждый получает секретное досье: профессия, возраст, здоровье, фобия, хобби, черты характера, инвентарь.<br/>
-                4. По раундам игроки раскрывают характеристики, обсуждают и озвучивают ситуации.<br/>
-                5. Начиная с 3-го раунда открывается голосование — сообщество решает, кого исключить из бункера.
-              </div>
-            </div>
-
-            <div class="setup-actions">
-              <button class="btn btn-primary" id="start-btn">
-                <i class="fa-solid fa-people-roof"></i> Далее: лобби
-              </button>
-            </div>
+          <div class="mp-tabs">
+            <button class="mp-tab ${homeTab === 'create' ? 'active' : ''}" id="tab-create"><i class="fa-solid fa-plus"></i> Создать комнату</button>
+            <button class="mp-tab ${homeTab === 'join' ? 'active' : ''}" id="tab-join"><i class="fa-solid fa-right-to-bracket"></i> Войти по коду</button>
           </div>
 
-          <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
+          <div class="panel mp-panel">
+            ${homeTab === 'create' ? createPanelHtml() : joinPanelHtml()}
+          </div>
+
+          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
         </div>
       </div>
     `;
 
-    const slider = document.getElementById('player-count');
-    const countVal = document.getElementById('count-val');
-    slider.addEventListener('input', () => {
-      countVal.textContent = slider.value;
-      state.playerCount = Number(slider.value);
+    document.getElementById('tab-create').addEventListener('click', () => { homeTab = 'create'; renderHome(); });
+    document.getElementById('tab-join').addEventListener('click', () => { homeTab = 'join'; renderHome(); });
+
+    if (homeTab === 'create') {
+      const slider = document.getElementById('create-count-slider');
+      const countVal = document.getElementById('create-count-val');
+      slider.addEventListener('input', () => {
+        countVal.textContent = slider.value;
+        createCount = Number(slider.value);
+      });
+      document.getElementById('create-room-btn').addEventListener('click', handleCreateRoom);
+    } else {
+      const input = document.getElementById('join-code-input');
+      input.addEventListener('input', () => {
+        joinCodeDraft = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+        input.value = joinCodeDraft;
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleJoinByCode(); });
+      document.getElementById('join-room-btn').addEventListener('click', handleJoinByCode);
+    }
+  }
+
+  function createPanelHtml() {
+    return `
+      <div class="stamp-corner">Секретно</div>
+      <div class="setup-field">
+        <label>Количество мест в игре: <span class="val" id="create-count-val">${createCount}</span></label>
+        <input type="range" id="create-count-slider" min="4" max="16" step="1" value="${createCount}" />
+        <div class="setup-hint">Каждый реальный игрок сам займёт своё место в лобби со своего устройства — по коду комнаты.</div>
+      </div>
+      <div class="setup-field">
+        <label>Как это работает</label>
+        <div class="setup-hint">
+          1. Вы создаёте комнату и получаете короткий код.<br/>
+          2. Передайте код остальным игрокам — каждый заходит на этот же сайт и вводит код.<br/>
+          3. Каждый выбирает своё место и вписывает имя — так определяется, кто есть кто.<br/>
+          4. Первый занявший место становится хостом и управляет ходом игры.<br/>
+          5. В начале игры только вы видите свои характеристики — другим они не видны, пока вы сами их не раскроете.
+        </div>
+      </div>
+      <div class="setup-actions">
+        <button class="btn btn-primary" id="create-room-btn"><i class="fa-solid fa-door-open"></i> Создать комнату</button>
+      </div>
+    `;
+  }
+
+  function joinPanelHtml() {
+    return `
+      <div class="setup-field" style="text-align:center;">
+        <label>Код комнаты</label>
+        <input type="text" id="join-code-input" class="room-code-input" placeholder="XXXXX" maxlength="5" value="${escapeHtml(joinCodeDraft)}" autocomplete="off" autocapitalize="characters" />
+        <div class="setup-hint">Получите код у того, кто создал комнату, и введите его здесь, чтобы выбрать своё место.</div>
+      </div>
+      <div class="setup-actions">
+        <button class="btn btn-primary" id="join-room-btn"><i class="fa-solid fa-right-to-bracket"></i> Войти в комнату</button>
+      </div>
+    `;
+  }
+
+  async function handleCreateRoom() {
+    const btn = document.getElementById('create-room-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Создание...';
+    try {
+      const res = await api('post', '/create', { playerCount: createCount });
+      seenEventRound = null;
+      seenSituationSig = undefined;
+      lastKnownStatus = null;
+      setSession(res.code, null);
+      startPolling();
+    } catch (e) {
+      showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-door-open"></i> Создать комнату';
+    }
+  }
+
+  function handleJoinByCode() {
+    const code = (joinCodeDraft || '').toUpperCase().trim();
+    if (code.length !== 5) {
+      showToast('Некорректный код', 'Код комнаты состоит из 5 символов.', 'fa-triangle-exclamation');
+      return;
+    }
+    seenEventRound = null;
+    seenSituationSig = undefined;
+    lastKnownStatus = null;
+    setSession(code, null);
+    startPolling();
+  }
+
+  // ---------------------------------------------------------------------
+  // ВЫБОР МЕСТА (до получения токена)
+  // ---------------------------------------------------------------------
+
+  function renderSeatSelect(data) {
+    if (!data || !data.room) {
+      appEl.innerHTML = `
+        <div class="screen" style="display:flex;align-items:center;justify-content:center;">
+          <div class="container" style="text-align:center;">
+            <i class="fa-solid fa-spinner fa-spin" style="font-size:32px;color:var(--rust-light);"></i>
+            <p class="setup-hint" style="margin-top:16px;">Подключение к комнате ${escapeHtml(session ? session.code : '')}...</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const room = data.room;
+    const players = data.players || [];
+    const gameStarted = room.status !== 'lobby';
+
+    appEl.innerHTML = `
+      <div class="screen">
+        <div class="container">
+          <div class="top-title">
+            <i class="fa-solid fa-people-roof"></i>
+            <h1>КОМНАТА</h1>
+          </div>
+          ${roomCodeBadgeHtml(room.code)}
+          <div class="subtitle">выбери своё место<span class="divider"></span>${players.filter(p => p.claimed).length} / ${players.length} занято</div>
+
+          ${gameStarted ? `
+            <div class="panel mp-panel" style="text-align:center;">
+              <i class="fa-solid fa-hourglass-half" style="font-size:32px;color:var(--warning);margin-bottom:14px;"></i>
+              <p>Игра в этой комнате уже началась. Дождитесь новой игры или попросите хоста нажать «Новая игра».</p>
+              <button class="btn btn-secondary" id="seat-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+            </div>
+          ` : `
+            <div class="panel mp-panel">
+              <div class="seat-grid" id="seat-grid">
+                ${players.map((p) => seatCellHtml(p, { hostId: room.hostPlayerId, clickable: true })).join('')}
+              </div>
+            </div>
+            <div class="panel name-claim-panel ${pendingSlot ? '' : 'hidden'}" id="name-claim-panel">
+              ${pendingSlot ? `
+                <div class="rules-title" style="margin-bottom:14px;"><i class="fa-solid fa-user-pen"></i> Место №${pendingSlot}</div>
+                <input type="text" id="seat-name-input" class="name-input-lg" placeholder="Твоё имя" maxlength="24" autocomplete="off" />
+                <div class="modal-actions" style="margin-top:16px;">
+                  <button class="btn btn-secondary" id="seat-cancel-btn">Отмена</button>
+                  <button class="btn btn-primary" id="seat-confirm-btn"><i class="fa-solid fa-check"></i> Занять место</button>
+                </div>
+              ` : ''}
+            </div>
+          `}
+
+          <div class="setup-actions" style="margin-top:20px;">
+            <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-left"></i> Выйти в главное меню</button>
+          </div>
+
+          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+        </div>
+      </div>
+    `;
+
+    attachRoomCodeCopy();
+
+    const backBtn = document.getElementById('seat-back-btn');
+    if (backBtn) backBtn.addEventListener('click', handleLeaveToHome);
+
+    document.getElementById('leave-home-btn').addEventListener('click', handleLeaveToHome);
+
+    if (!gameStarted) {
+      document.querySelectorAll('#seat-grid .seat-cell.empty').forEach((cell) => {
+        cell.addEventListener('click', () => {
+          pendingSlot = Number(cell.dataset.slot);
+          render();
+          setTimeout(() => {
+            const input = document.getElementById('seat-name-input');
+            if (input) input.focus();
+          }, 30);
+        });
+      });
+
+      const cancelBtn = document.getElementById('seat-cancel-btn');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => { pendingSlot = null; render(); });
+
+      const confirmBtn = document.getElementById('seat-confirm-btn');
+      if (confirmBtn) confirmBtn.addEventListener('click', handleClaimSeat);
+
+      const nameInput = document.getElementById('seat-name-input');
+      if (nameInput) nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleClaimSeat(); });
+    }
+  }
+
+  async function handleClaimSeat() {
+    const input = document.getElementById('seat-name-input');
+    const name = (input ? input.value : '').trim().slice(0, 24);
+    if (!name) {
+      showToast('Введите имя', 'Пожалуйста, впишите своё имя перед тем, как занять место.', 'fa-triangle-exclamation');
+      return;
+    }
+    const btn = document.getElementById('seat-confirm-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Занимаем...'; }
+    try {
+      const res = await api('post', `/${session.code}/join`, { slot: pendingSlot, name });
+      setSession(session.code, res.token);
+      pendingSlot = null;
+      lastData = res;
+      render();
+      showToast('Добро пожаловать!', `Вы заняли место №${res.me ? res.me.slot : ''} как ${escapeHtml(name)}.`, 'fa-user-check');
+    } catch (e) {
+      showToast('Не удалось занять место', errorMessageFrom(e), 'fa-triangle-exclamation');
+      pendingSlot = null;
+      render();
+    }
+  }
+
+  function handleLeaveToHome() {
+    clearSession();
+    stopPolling();
+    lastData = null;
+    currentView = null;
+    pendingSlot = null;
+    homeTab = 'create';
+    renderHome();
+  }
+
+  function seatCellHtml(p, ctx) {
+    const isHostSeat = ctx.hostId && p.id === ctx.hostId;
+    if (!p.claimed) {
+      return `<div class="seat-cell empty" data-slot="${p.slot}">
+        <div class="seat-num">${p.slot}</div>
+        <div class="seat-state"><i class="fa-solid fa-user-plus"></i> Свободно</div>
+      </div>`;
+    }
+    return `<div class="seat-cell taken ${p.isMe ? 'mine' : ''}" data-slot="${p.slot}">
+      <div class="seat-num">${p.slot}</div>
+      <div class="seat-name">${escapeHtml(p.name)}</div>
+      <div class="seat-badges">
+        ${p.isMe ? '<span class="me-badge">Ты</span>' : ''}
+        ${isHostSeat ? '<span class="host-badge" title="Хост"><i class="fa-solid fa-crown"></i></span>' : ''}
+        ${p.excluded ? '<span class="excluded-badge" title="Исключён"><i class="fa-solid fa-user-slash"></i></span>' : ''}
+      </div>
+    </div>`;
+  }
+
+  function roomCodeBadgeHtml(code) {
+    return `
+      <div class="room-code-badge">
+        <span>Код комнаты:</span>
+        <span class="code-text">${escapeHtml(code)}</span>
+        <button class="copy-code-btn" id="copy-code-btn" title="Скопировать ссылку-приглашение"><i class="fa-solid fa-copy"></i></button>
+      </div>
+    `;
+  }
+
+  function attachRoomCodeCopy() {
+    const btn = document.getElementById('copy-code-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const code = session ? session.code : '';
+      const url = `${location.origin}${location.pathname}?room=${code}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Скопировано', 'Ссылка-приглашение скопирована в буфер обмена.', 'fa-copy');
+      } catch (e) {
+        showToast('Код комнаты', code, 'fa-copy');
+      }
     });
-
-    document.getElementById('start-btn').addEventListener('click', goToLobby);
   }
 
-  function goToLobby() {
-    const count = state.playerCount || 8;
-    const existingNames = (state.names && state.names.length === count) ? state.names : null;
-    const names = existingNames || Array.from({ length: count }, (_, i) => '');
-    state = { screen: 'lobby', playerCount: count, names };
-    saveState();
-    renderCurrentScreen();
-  }
+  // ---------------------------------------------------------------------
+  // ЛОББИ (уже занял место, ожидание старта игры)
+  // ---------------------------------------------------------------------
 
-  // -------------------------------------------------------------------
-  // ЭКРАН ЛОББИ
-  // -------------------------------------------------------------------
+  function renderLobby(data) {
+    const room = data.room;
+    const players = data.players || [];
+    const me = data.me;
+    const isHost = !!(me && room.hostPlayerId === me.id);
+    const claimedCount = players.filter((p) => p.claimed).length;
+    const hostPlayer = players.find((p) => p.id === room.hostPlayerId);
 
-  function renderLobbyScreen() {
-    const names = state.names || [];
     appEl.innerHTML = `
       <div class="screen">
         <div class="container">
@@ -151,557 +611,572 @@
             <i class="fa-solid fa-people-roof"></i>
             <h1>ЛОББИ</h1>
           </div>
-          <div class="subtitle">знакомство перед спуском<span class="divider"></span>${names.length} мест в бункере</div>
+          ${roomCodeBadgeHtml(room.code)}
+          <div class="subtitle">знакомство перед спуском<span class="divider"></span>${claimedCount} / ${players.length} игроков в комнате</div>
 
           <div class="panel rules-panel">
             <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
             <div class="rules-grid">
-              <div class="rule-item">
-                <i class="fa-solid fa-1"></i>
-                <div>
-                  <div class="rule-h">Катастрофа и бункер</div>
-                  <div class="rule-t">Ведущий объявляет катастрофу, уничтожившую мир на поверхности, и параметры бункера: площадь, срок пребывания, этажность, запасы. Мест на всех не хватит.</div>
-                </div>
-              </div>
-              <div class="rule-item">
-                <i class="fa-solid fa-2"></i>
-                <div>
-                  <div class="rule-h">Секретное досье</div>
-                  <div class="rule-t">Каждый получает карточку: профессия (видна сразу), возраст и пол, здоровье, фобия, хобби, черты характера, инвентарь и доп. информация — всё это до поры скрыто от остальных.</div>
-                </div>
-              </div>
-              <div class="rule-item">
-                <i class="fa-solid fa-3"></i>
-                <div>
-                  <div class="rule-h">Раунды и раскрытие</div>
-                  <div class="rule-t">В каждом раунде игроки по очереди раскрывают по одной характеристике (или больше) и подробно рассказывают о себе, чтобы убедить остальных оставить их в бункере.</div>
-                </div>
-              </div>
-              <div class="rule-item">
-                <i class="fa-solid fa-4"></i>
-                <div>
-                  <div class="rule-h">Ситуации</div>
-                  <div class="rule-t">Ведущий периодически озвучивает случайные ситуации и происшествия в бункере — их нужно обсудить и принять решение сообща.</div>
-                </div>
-              </div>
-              <div class="rule-item">
-                <i class="fa-solid fa-5"></i>
-                <div>
-                  <div class="rule-h">Голосование</div>
-                  <div class="rule-t">Начиная с 3-го раунда открывается голосование: все решают, кто покинет бункер. Исключённый выбывает из игры.</div>
-                </div>
-              </div>
-              <div class="rule-item">
-                <i class="fa-solid fa-6"></i>
-                <div>
-                  <div class="rule-h">Победа</div>
-                  <div class="rule-t">Игра продолжается до тех пор, пока не останется ровно столько выживших, сколько мест в бункере — именно они и побеждают.</div>
-                </div>
-              </div>
+              <div class="rule-item"><i class="fa-solid fa-1"></i><div>
+                <div class="rule-h">Катастрофа и бункер</div>
+                <div class="rule-t">Хост объявляет катастрофу, уничтожившую мир на поверхности, и параметры бункера. Мест на всех не хватит.</div>
+              </div></div>
+              <div class="rule-item"><i class="fa-solid fa-2"></i><div>
+                <div class="rule-h">Секретное досье — только для тебя</div>
+                <div class="rule-t">Каждый получает карточку: профессия видна сразу, а возраст, здоровье, фобия, хобби, черты характера, инвентарь — видны только тебе, пока ты сам их не раскроешь.</div>
+              </div></div>
+              <div class="rule-item"><i class="fa-solid fa-3"></i><div>
+                <div class="rule-h">Раунды и раскрытие</div>
+                <div class="rule-t">В каждом раунде игроки по очереди раскрывают характеристики и рассказывают о себе вслух, чтобы убедить остальных оставить их в бункере.</div>
+              </div></div>
+              <div class="rule-item"><i class="fa-solid fa-4"></i><div>
+                <div class="rule-h">Ситуации</div>
+                <div class="rule-t">Хост периодически озвучивает случайные ситуации в бункере — их нужно обсудить в чате или вслух и принять решение сообща.</div>
+              </div></div>
+              <div class="rule-item"><i class="fa-solid fa-5"></i><div>
+                <div class="rule-h">Голосование с таймером</div>
+                <div class="rule-t">Начиная с 3-го раунда открывается голосование на время: все решают, кто покинет бункер. Исключённый выбывает из игры.</div>
+              </div></div>
+              <div class="rule-item"><i class="fa-solid fa-6"></i><div>
+                <div class="rule-h">Победа</div>
+                <div class="rule-t">Игра продолжается, пока не останется ровно столько выживших, сколько мест в бункере — они и побеждают.</div>
+              </div></div>
             </div>
           </div>
 
-          <div class="panel names-panel">
-            <div class="rules-title"><i class="fa-solid fa-signature"></i> Представление игроков</div>
-            <div class="setup-hint" style="margin-bottom:18px;">Впишите имена всех участников (или оставьте поле пустым — тогда игрок будет назван «Игрок N»). Каждый сможет в любой момент приватно посмотреть своё полное досье кнопкой с иконкой глаза на карточке.</div>
-            <div class="names-grid" id="names-grid">
-              ${names.map((n, i) => `
-                <div class="name-field">
-                  <div class="name-num">${i + 1}</div>
-                  <input type="text" class="name-input" id="lobby-name-${i}" placeholder="Игрок ${i + 1}" maxlength="24" value="${escapeHtml(n || '')}" />
-                </div>
-              `).join('')}
+          <div class="panel mp-panel">
+            <div class="rules-title"><i class="fa-solid fa-signature"></i> Игроки в лобби</div>
+            <div class="seat-grid" id="seat-grid">
+              ${players.map((p) => seatCellHtml(p, { hostId: room.hostPlayerId, clickable: false })).join('')}
             </div>
           </div>
 
           <div class="catastrophe-actions">
-            <button class="btn btn-secondary" id="lobby-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
-            <button class="btn btn-primary" id="lobby-start-btn"><i class="fa-solid fa-door-closed"></i> Начать катастрофу</button>
+            ${isHost ? `
+              <button class="btn btn-primary" id="lobby-start-btn" ${claimedCount < 2 ? 'disabled' : ''}>
+                <i class="fa-solid fa-door-closed"></i> Начать катастрофу
+              </button>
+              ${claimedCount < 2 ? '<div class="setup-hint">Нужно минимум 2 занятых места, чтобы начать игру.</div>' : ''}
+            ` : `
+              <div class="setup-hint"><i class="fa-solid fa-hourglass-half"></i> Ожидаем, пока хост${hostPlayer ? ' (' + escapeHtml(hostPlayer.name) + ')' : ''} начнёт игру...</div>
+            `}
           </div>
 
-          <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
+          <div class="setup-actions">
+            <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i> Покинуть комнату</button>
+          </div>
+
+          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
         </div>
       </div>
     `;
 
-    names.forEach((_, i) => {
-      const input = document.getElementById(`lobby-name-${i}`);
-      input.addEventListener('input', () => {
-        state.names[i] = input.value;
-        saveState();
-      });
-    });
+    attachRoomCodeCopy();
+    document.getElementById('leave-home-btn').addEventListener('click', handleLeaveToHome);
 
-    document.getElementById('lobby-back-btn').addEventListener('click', () => {
-      state.screen = 'setup';
-      saveState();
-      renderCurrentScreen();
-    });
-
-    document.getElementById('lobby-start-btn').addEventListener('click', startNewGame);
+    const startBtn = document.getElementById('lobby-start-btn');
+    if (startBtn) startBtn.addEventListener('click', handleStartGame);
   }
 
-  async function startNewGame() {
+  async function handleStartGame() {
     const btn = document.getElementById('lobby-start-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Генерация катастрофы...';
-
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Генерация катастрофы...'; }
     try {
-      const res = await axios.post('/api/game/new', {
-        playerCount: state.playerCount,
-        names: state.names,
-      });
-      const { catastrophe, bunker, players } = res.data;
-
-      const preparedPlayers = players.map((p) => ({
-        ...p,
-        revealed: { profession: true },
-        excluded: false,
-      }));
-
-      state = {
-        screen: 'catastrophe',
-        playerCount: state.playerCount,
-        names: state.names,
-        catastrophe,
-        bunker,
-        players: preparedPlayers,
-        round: 1,
-        situationsLog: [],
-      };
-      saveState();
-      renderCurrentScreen();
+      await api('post', `/${session.code}/start`, {});
+      await pollOnce();
     } catch (e) {
-      alert('Ошибка генерации игры. Попробуйте снова.');
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-door-closed"></i> Начать катастрофу';
+      showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation');
+      render();
     }
   }
 
-  // -------------------------------------------------------------------
-  // ЭКРАН КАТАСТРОФЫ
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // КАТАСТРОФА
+  // ---------------------------------------------------------------------
 
-  function renderCatastropheScreen() {
-    const { catastrophe, bunker } = state;
+  function renderCatastrophe(data) {
+    const room = data.room;
+    const me = data.me;
+    const isHost = !!(me && room.hostPlayerId === me.id);
+    const catastrophe = room.catastrophe || { icon: 'fa-radiation', title: '...', description: '' };
+    const bunker = room.bunker || {};
+
     appEl.innerHTML = `
       <div class="catastrophe-screen">
         <div class="catastrophe-alert"><i class="fa-solid fa-triangle-exclamation"></i> Внимание — глобальная катастрофа <i class="fa-solid fa-triangle-exclamation"></i></div>
         <div class="panel catastrophe-card">
+          ${roomCodeBadgeHtml(room.code)}
           <i class="fa-solid ${catastrophe.icon} catastrophe-icon"></i>
-          <h2 class="catastrophe-title">${catastrophe.title}</h2>
-          <p class="catastrophe-desc">${catastrophe.description}</p>
+          <h2 class="catastrophe-title">${escapeHtml(catastrophe.title)}</h2>
+          <p class="catastrophe-desc">${escapeHtml(catastrophe.description || '')}</p>
 
           <div class="bunker-params">
-            <div class="bunker-param">
-              <div class="label"><i class="fa-solid fa-ruler-combined"></i>Площадь</div>
-              <div class="value">${bunker.size}</div>
-            </div>
-            <div class="bunker-param">
-              <div class="label"><i class="fa-solid fa-hourglass-half"></i>Срок пребывания</div>
-              <div class="value">${bunker.duration}</div>
-            </div>
-            <div class="bunker-param">
-              <div class="label"><i class="fa-solid fa-layer-group"></i>Этажность</div>
-              <div class="value">${bunker.floors}</div>
-            </div>
-            <div class="bunker-param">
-              <div class="label"><i class="fa-solid fa-door-open"></i>Доп. помещение</div>
-              <div class="value">${bunker.extraRoom}</div>
-            </div>
-            <div class="bunker-param">
-              <div class="label"><i class="fa-solid fa-drumstick-bite"></i>Запасы провизии</div>
-              <div class="value">${bunker.foodSupply}</div>
-            </div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-ruler-combined"></i>Площадь</div><div class="value">${escapeHtml(bunker.size || '')}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-hourglass-half"></i>Срок пребывания</div><div class="value">${escapeHtml(bunker.duration || '')}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-layer-group"></i>Этажность</div><div class="value">${escapeHtml(bunker.floors || '')}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-door-open"></i>Доп. помещение</div><div class="value">${escapeHtml(bunker.extraRoom || '')}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-drumstick-bite"></i>Запасы провизии</div><div class="value">${escapeHtml(bunker.foodSupply || '')}</div></div>
           </div>
 
           <div class="catastrophe-actions">
-            <button class="btn btn-secondary" id="lobby-return-btn"><i class="fa-solid fa-arrow-left"></i> В лобби</button>
-            <button class="btn btn-secondary" id="reroll-catastrophe"><i class="fa-solid fa-rotate"></i> Другая катастрофа</button>
-            <button class="btn btn-secondary" id="reroll-bunker"><i class="fa-solid fa-rotate"></i> Другой бункер</button>
-            <button class="btn btn-primary" id="enter-bunker"><i class="fa-solid fa-people-group"></i> Спуститься в бункер</button>
+            ${isHost ? `
+              <button class="btn btn-secondary" id="reroll-catastrophe"><i class="fa-solid fa-rotate"></i> Другая катастрофа</button>
+              <button class="btn btn-secondary" id="reroll-bunker"><i class="fa-solid fa-rotate"></i> Другой бункер</button>
+              <button class="btn btn-primary" id="enter-bunker"><i class="fa-solid fa-people-group"></i> Спуститься в бункер</button>
+            ` : `
+              <div class="setup-hint"><i class="fa-solid fa-hourglass-half"></i> Хост изучает катастрофу — скоро все спустятся в бункер...</div>
+            `}
           </div>
         </div>
-        <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
+        <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
       </div>
     `;
 
-    document.getElementById('lobby-return-btn').addEventListener('click', () => {
-      state.screen = 'lobby';
-      saveState();
-      renderCurrentScreen();
+    attachRoomCodeCopy();
+
+    const rerollC = document.getElementById('reroll-catastrophe');
+    if (rerollC) rerollC.addEventListener('click', async () => {
+      try { await api('post', `/${session.code}/reroll-catastrophe`, {}); await pollOnce(); }
+      catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
     });
 
-    document.getElementById('reroll-catastrophe').addEventListener('click', async () => {
-      const res = await axios.get('/api/game/catastrophe');
-      state.catastrophe = res.data.catastrophe;
-      saveState();
-      renderCatastropheScreen();
+    const rerollB = document.getElementById('reroll-bunker');
+    if (rerollB) rerollB.addEventListener('click', async () => {
+      try { await api('post', `/${session.code}/reroll-bunker`, {}); await pollOnce(); }
+      catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
     });
 
-    document.getElementById('reroll-bunker').addEventListener('click', async () => {
-      const res = await axios.get('/api/game/bunker');
-      state.bunker = res.data.bunker;
-      saveState();
-      renderCatastropheScreen();
-    });
-
-    document.getElementById('enter-bunker').addEventListener('click', () => {
-      state.screen = 'game';
-      saveState();
-      renderCurrentScreen();
+    const enterBtn = document.getElementById('enter-bunker');
+    if (enterBtn) enterBtn.addEventListener('click', async () => {
+      try { await api('post', `/${session.code}/enter-bunker`, {}); await pollOnce(); }
+      catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
     });
   }
 
-  // -------------------------------------------------------------------
-  // ЭКРАН ИГРЫ
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // ИГРА (основной экран)
+  // ---------------------------------------------------------------------
 
-  function renderGameScreen() {
-    const { catastrophe, bunker, players, round } = state;
-    const aliveCount = players.filter((p) => !p.excluded).length;
-    const totalCount = players.length;
-    const pct = Math.min(100, Math.round((aliveCount / totalCount) * 100));
-    const votingUnlocked = round >= VOTING_ROUND_THRESHOLD;
+  function renderGame(data) {
+    const room = data.room;
+    const players = data.players || [];
+    const me = data.me;
+    const isHost = !!(me && room.hostPlayerId === me.id);
+    const aliveCount = players.filter((p) => !p.excluded && p.claimed).length;
+    const totalCount = players.filter((p) => p.claimed).length || players.length;
+    const pct = totalCount ? Math.min(100, Math.round((aliveCount / totalCount) * 100)) : 0;
+    const votingUnlocked = room.round >= room.votingThreshold;
+    const timer = room.timer;
 
     appEl.innerHTML = `
       <div class="screen" style="padding-top:0;">
         <div class="game-topbar">
           <div class="brand"><i class="fa-solid fa-radiation"></i> БУНКЕР</div>
-          <div class="round-badge"><i class="fa-solid fa-hourglass-half"></i> Раунд ${round}</div>
+          <div class="room-code-badge small">${escapeHtml(room.code)}</div>
+          <div class="round-badge"><i class="fa-solid fa-hourglass-half"></i> Раунд ${room.round}</div>
+          ${timer ? `<div class="timer-pill ${timer.type}">${timer.type === 'voting' ? '🗳' : '⏱'} <span data-ends-at="${timer.endsAt}">--:--</span></div>` : ''}
           <div class="topbar-actions">
-            <button class="btn btn-secondary" id="situation-btn"><i class="fa-solid fa-triangle-exclamation"></i> Ситуация</button>
-            <button class="btn ${votingUnlocked ? 'btn-danger' : 'btn-secondary'}" id="voting-btn" ${votingUnlocked ? '' : 'title="Голосование откроется с 3-го раунда"'}>
-              <i class="fa-solid fa-square-poll-vertical"></i> Голосование ${votingUnlocked ? '' : `<i class="fa-solid fa-lock" style="font-size:11px;margin-left:4px;"></i>`}
-            </button>
-            <button class="btn btn-secondary" id="next-round-btn"><i class="fa-solid fa-forward"></i> Следующий раунд</button>
-            <button class="btn btn-ghost" id="new-game-btn"><i class="fa-solid fa-rotate-left"></i> Новая игра</button>
+            ${isHost ? `
+              <button class="btn btn-secondary" id="situation-btn"><i class="fa-solid fa-triangle-exclamation"></i> Ситуация</button>
+              <button class="btn btn-secondary" id="next-round-btn"><i class="fa-solid fa-forward"></i> Следующий раунд</button>
+              <button class="btn btn-ghost" id="reset-game-btn"><i class="fa-solid fa-rotate-left"></i> Новая игра</button>
+            ` : ''}
+            <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
           </div>
         </div>
 
         <div class="survivors-bar-wrap">
           <div class="survivors-bar-label">
             <span><i class="fa-solid fa-people-roof"></i> Выживших в бункере: ${aliveCount} / ${totalCount}</span>
-            <span>${votingUnlocked ? '<i class="fa-solid fa-unlock" style="color:var(--toxic);"></i> Голосование доступно' : `Голосование откроется в раунде ${VOTING_ROUND_THRESHOLD}`}</span>
+            <span>${votingUnlocked ? '<i class="fa-solid fa-unlock" style="color:var(--toxic);"></i> Голосование доступно' : `Голосование откроется в раунде ${room.votingThreshold}`}</span>
           </div>
-          <div class="survivors-bar">
-            <div class="survivors-bar-fill ${pct < 40 ? 'over' : ''}" style="width:${pct}%"></div>
-          </div>
+          <div class="survivors-bar"><div class="survivors-bar-fill ${pct < 40 ? 'over' : ''}" style="width:${pct}%"></div></div>
         </div>
 
         <div class="info-strip">
-          <div class="panel mini-panel">
-            <div class="mini-title"><i class="fa-solid ${catastrophe.icon}"></i>Катастрофа</div>
-            <div class="mini-value">${catastrophe.title}</div>
-          </div>
-          <div class="panel mini-panel">
-            <div class="mini-title"><i class="fa-solid fa-ruler-combined"></i>Бункер</div>
-            <div class="mini-value">${bunker.size}</div>
-          </div>
-          <div class="panel mini-panel">
-            <div class="mini-title"><i class="fa-solid fa-hourglass-half"></i>Срок</div>
-            <div class="mini-value">${bunker.duration}</div>
-          </div>
-          <div class="panel mini-panel">
-            <div class="mini-title"><i class="fa-solid fa-drumstick-bite"></i>Провизия</div>
-            <div class="mini-value">${bunker.foodSupply}</div>
-          </div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid ${room.catastrophe ? room.catastrophe.icon : 'fa-radiation'}"></i>Катастрофа</div><div class="mini-value">${escapeHtml(room.catastrophe ? room.catastrophe.title : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-ruler-combined"></i>Бункер</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.size : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-hourglass-half"></i>Срок</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.duration : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-drumstick-bite"></i>Провизия</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.foodSupply : '—')}</div></div>
         </div>
 
-        <div class="players-grid" id="players-grid">
-          ${players.map(renderPlayerCard).join('')}
+        <div class="main-columns">
+          <div class="players-grid" id="players-grid">
+            ${players.filter((p) => p.claimed).map((p) => renderPlayerCardMp(p, { isHost, room, data })).join('')}
+          </div>
+          <aside class="side-panel">
+            <div class="panel voting-card" id="voting-card">${renderVotingCardHtml(data, isHost)}</div>
+            <div class="panel chat-card" id="chat-card">${renderChatCardHtml(data, isHost)}</div>
+          </aside>
         </div>
 
-        <div class="app-footer">© БУНКЕР — электронный помощник для настольной игры</div>
+        <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
       </div>
-      <div class="toast-container" id="toast-container"></div>
     `;
 
-    document.getElementById('next-round-btn').addEventListener('click', handleNextRound);
-    document.getElementById('new-game-btn').addEventListener('click', handleNewGameClick);
-    document.getElementById('situation-btn').addEventListener('click', handleShowSituation);
-    document.getElementById('voting-btn').addEventListener('click', () => handleOpenVoting(votingUnlocked));
-
-    // Player name inputs & actions
-    players.forEach((p) => {
-      const nameInput = document.getElementById(`name-${p.id}`);
-      if (nameInput) {
-        nameInput.addEventListener('change', () => {
-          p.name = nameInput.value || `Игрок ${p.id}`;
-          saveState();
-        });
-      }
-
-      const excludeBtn = document.getElementById(`exclude-${p.id}`);
-      if (excludeBtn) {
-        excludeBtn.addEventListener('click', () => toggleExclude(p.id));
-      }
-
-      const peekBtn = document.getElementById(`peek-${p.id}`);
-      if (peekBtn) {
-        peekBtn.addEventListener('click', () => openPeekModal(p.id));
-      }
-
-      ATTR_FIELDS.forEach((f) => {
-        const head = document.getElementById(`attr-head-${p.id}-${f.key}`);
-        if (head) {
-          head.addEventListener('click', (e) => {
-            if (e.target.closest('.attr-reroll')) return;
-            toggleReveal(p.id, f.key);
-          });
-        }
-        const rerollBtn = document.getElementById(`attr-reroll-${p.id}-${f.key}`);
-        if (rerollBtn) {
-          rerollBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleReroll(p.id, f.key);
-          });
-        }
-      });
-    });
+    attachGameHandlers(data, isHost);
   }
 
-  function renderPlayerCard(p) {
+  function renderPlayerCardMp(p, ctx) {
     const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
+    const isHostSeat = ctx.room.hostPlayerId === p.id;
+    const isMe = !!p.isMe;
+    const votingActive = ctx.data.voting && ctx.data.voting.status === 'active';
+    const meExcluded = !!(ctx.data.players.find((x) => x.isMe) || {}).excluded;
+    const canVoteFor = votingActive && !isMe && !p.excluded && !meExcluded;
+    const myVoteTargetId = ctx.data.voting ? ctx.data.voting.myVoteTargetId : null;
+
     return `
-      <div class="player-card ${p.excluded ? 'excluded' : ''}" id="card-${p.id}">
+      <div class="player-card ${p.excluded ? 'excluded' : ''} ${isMe ? 'is-me' : ''}" id="card-${p.id}">
         <div class="player-card-head">
           <div class="player-avatar">${initial}</div>
-          <input class="player-name-input" id="name-${p.id}" value="${escapeHtml(p.name)}" maxlength="24" />
+          <div class="player-name-static">
+            ${escapeHtml(p.name)}
+            ${isMe ? '<span class="me-badge">Ты</span>' : ''}
+            ${isHostSeat ? '<span class="host-badge" title="Хост"><i class="fa-solid fa-crown"></i></span>' : ''}
+          </div>
           <div class="player-card-actions">
-            <button class="icon-toggle" id="peek-${p.id}" title="Приватный просмотр — полное досье для тебя">
-              <i class="fa-solid fa-eye"></i>
-            </button>
-            <button class="icon-toggle ${p.excluded ? 'active' : ''}" id="exclude-${p.id}" title="Исключить/вернуть">
-              <i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i>
-            </button>
+            ${ctx.isHost ? `<button class="icon-toggle ${p.excluded ? 'active' : ''}" data-action="exclude" data-target-id="${p.id}" title="Исключить/вернуть"><i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i></button>` : ''}
           </div>
         </div>
 
         <div class="player-profession-strip">
           <i class="fa-solid fa-briefcase"></i>
-          <div>
-            <span class="prof-label">Профессия</span>
-            <span class="prof-text">${p.profession}</span>
-          </div>
+          <div><span class="prof-label">Профессия</span><span class="prof-text">${escapeHtml(p.profession || '')}</span></div>
         </div>
 
         <div class="attributes-list">
-          ${ATTR_FIELDS.map((f) => renderAttrRow(p, f)).join('')}
+          ${ATTR_FIELDS.map((f) => renderAttrRowMp(p, f, isMe)).join('')}
         </div>
+
+        ${canVoteFor ? `
+          <button class="vote-target-btn ${myVoteTargetId === p.id ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}">
+            <i class="fa-solid fa-square-poll-vertical"></i> ${myVoteTargetId === p.id ? 'Твой голос' : 'Голосовать против'}
+          </button>
+        ` : ''}
       </div>
     `;
   }
 
-  function renderAttrRow(p, f) {
-    const revealed = !!p.revealed[f.key];
-    return `
-      <div class="attr-row ${revealed ? 'revealed' : 'hidden-state'}" id="attr-row-${p.id}-${f.key}">
-        <div class="attr-row-head" id="attr-head-${p.id}-${f.key}">
-          <div class="attr-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
-          ${
-            revealed
+  function renderAttrRowMp(p, f, isMe) {
+    const revealed = !!(p.revealed && p.revealed[f.key]);
+    const value = p[f.key];
+    const classes = ['attr-row'];
+    if (isMe) classes.push('mine');
+    classes.push(revealed ? 'revealed' : 'hidden-state');
+
+    const head = isMe
+      ? `<div class="attr-row-head attr-head-toggle" data-action="reveal" data-field="${f.key}">
+           <div class="attr-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
+           ${revealed
               ? `<i class="fa-solid fa-lock-open" style="color:var(--rust-light);font-size:11px;"></i>`
               : `<div class="attr-lock">
-                   <button class="attr-reroll" id="attr-reroll-${p.id}-${f.key}" title="Перебросить (пока скрыто)">
-                     <i class="fa-solid fa-dice"></i>
-                   </button>
+                   <button class="attr-reroll" data-action="reroll" data-field="${f.key}" title="Перебросить, пока скрыто от других"><i class="fa-solid fa-dice"></i></button>
                    <i class="fa-solid fa-lock"></i>
-                 </div>`
-          }
+                 </div>`}
+         </div>`
+      : `<div class="attr-row-head">
+           <div class="attr-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
+           ${revealed ? `<i class="fa-solid fa-eye" style="color:var(--rust-light);font-size:11px;"></i>` : `<i class="fa-solid fa-lock" style="font-size:11px;color:var(--text-faint);"></i>`}
+         </div>`;
+
+    const showValue = isMe || revealed;
+    return `<div class="${classes.join(' ')}">${head}${showValue ? `<div class="attr-value">${escapeHtml(String(value == null ? '' : value))}</div>` : ''}</div>`;
+  }
+
+  function renderVotingCardHtml(data, isHost) {
+    const room = data.room;
+    const voting = data.voting;
+    const votingUnlocked = room.round >= room.votingThreshold;
+    const alivePlayers = data.players.filter((p) => p.claimed && !p.excluded);
+    const meExcluded = !!(data.players.find((p) => p.isMe) || {}).excluded;
+
+    if (voting && voting.status === 'active') {
+      const canFinalizeNow = isHost || Number(voting.endsAt) <= Date.now();
+      return `
+        <div class="voting-header">
+          <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> Голосование — раунд ${voting.round}</div>
+          <div class="timer-pill voting"><span data-ends-at="${voting.endsAt}">--:--</span></div>
         </div>
-        <div class="attr-value">${p[f.key]}</div>
+        <div class="voting-progress-note">Голосов подано: ${voting.votesCast} / ${voting.totalVoters}</div>
+        <div class="voting-list">
+          ${alivePlayers.map((p) => {
+            const votes = voting.tally[p.id] || 0;
+            const isTarget = voting.myVoteTargetId === p.id;
+            return `
+              <div class="voting-row">
+                <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)}${p.isMe ? ' <span class="me-badge">Ты</span>' : ''}</div>
+                <div class="voting-controls">
+                  <span class="vote-count">${votes}</span>
+                  ${(!p.isMe && !meExcluded) ? `<button class="vote-btn-small ${isTarget ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}" title="Голосовать против"><i class="fa-solid fa-hand-point-right"></i></button>` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button class="btn btn-danger" id="vote-finalize-btn" ${canFinalizeNow ? '' : 'disabled title="Завершить раньше времени может только хост"'}>
+            <i class="fa-solid fa-flag-checkered"></i> Завершить голосование
+          </button>
+        </div>
+      `;
+    }
+
+    if (voting && voting.status === 'finished' && voting.result) {
+      const r = voting.result;
+      let resultText = 'Никто не был исключён.';
+      if (r.excludedPlayerId) {
+        const target = data.players.find((p) => p.id === r.excludedPlayerId);
+        resultText = `Исключён(а): ${target ? escapeHtml(target.name) : 'игрок'} (${r.tally[r.excludedPlayerId]} голос.)`;
+      } else if (r.tie) {
+        resultText = 'Ничья — никто не исключён.';
+      }
+      return `
+        <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> Итоги голосования (раунд ${voting.round})</div>
+        <p class="setup-hint" style="margin:10px 0 16px;">${resultText}</p>
+        ${isHost && votingUnlocked ? `
+          <div class="voting-start-row">
+            <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" />
+            <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> Новое голосование</button>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    if (!votingUnlocked) {
+      return `
+        <div class="rules-title"><i class="fa-solid fa-lock"></i> Голосование</div>
+        <p class="setup-hint">Голосование откроется начиная с ${room.votingThreshold}-го раунда. Сейчас раунд ${room.round}.</p>
+      `;
+    }
+
+    return `
+      <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> Голосование</div>
+      ${isHost ? `
+        <p class="setup-hint" style="margin-bottom:12px;">Запустите голосование за исключение — у всех будет ограниченное время на голос.</p>
+        <div class="voting-start-row">
+          <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" />
+          <span class="seconds-label">сек.</span>
+          <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> Начать голосование</button>
+        </div>
+      ` : `<p class="setup-hint">Голосование доступно — хост может его запустить в любой момент.</p>`}
+    `;
+  }
+
+  function renderChatCardHtml(data, isHost) {
+    const room = data.room;
+    const chat = data.chat || [];
+    const discussionTimer = room.timer && room.timer.type === 'discussion' ? room.timer : null;
+
+    return `
+      <div class="chat-header">
+        <div class="rules-title" style="margin-bottom:0;"><i class="fa-solid fa-comments"></i> Чат бункера</div>
+        ${discussionTimer ? `<div class="timer-pill discussion"><i class="fa-solid fa-hourglass-half"></i> <span data-ends-at="${discussionTimer.endsAt}">--:--</span></div>` : ''}
+      </div>
+      ${isHost ? `
+        <div class="discussion-timer-controls">
+          <input type="number" id="discussion-seconds-input" min="15" max="1800" value="${discussionTimer ? discussionTimer.seconds : 180}" class="seconds-input" />
+          <span class="seconds-label">сек.</span>
+          <button class="btn btn-secondary btn-xs" id="discussion-start-btn"><i class="fa-solid fa-hourglass-start"></i> Таймер обсуждения</button>
+          ${discussionTimer ? `<button class="btn btn-ghost btn-xs" id="discussion-cancel-btn"><i class="fa-solid fa-xmark"></i></button>` : ''}
+        </div>
+      ` : ''}
+      <div class="chat-messages" id="chat-messages">
+        ${chat.map((m) => chatMessageHtml(m)).join('')}
+      </div>
+      <div class="chat-form">
+        <input type="text" id="chat-input" class="chat-input" placeholder="Написать сообщение..." maxlength="500" autocomplete="off" />
+        <button class="btn btn-primary btn-xs" id="chat-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
       </div>
     `;
   }
 
-  function toggleReveal(playerId, field) {
-    const p = state.players.find((x) => x.id === playerId);
-    if (!p) return;
-    p.revealed[field] = !p.revealed[field];
-    saveState();
-
-    const row = document.getElementById(`attr-row-${playerId}-${field}`);
-    if (row) {
-      row.classList.toggle('revealed', !!p.revealed[field]);
-      row.classList.toggle('hidden-state', !p.revealed[field]);
-      row.classList.add('just-revealed');
-      setTimeout(() => row.classList.remove('just-revealed'), 400);
+  function chatMessageHtml(m) {
+    if (m.type === 'system') {
+      return `<div class="chat-message system"><i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(m.text)}</div>`;
     }
-    const head = document.getElementById(`attr-head-${playerId}-${field}`);
-    if (head) {
-      const f = ATTR_FIELDS.find((x) => x.key === field);
-      const revealed = !!p.revealed[field];
-      head.innerHTML = `
-        <div class="attr-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
-        ${
-          revealed
-            ? `<i class="fa-solid fa-lock-open" style="color:var(--rust-light);font-size:11px;"></i>`
-            : `<div class="attr-lock">
-                 <button class="attr-reroll" id="attr-reroll-${playerId}-${field}" title="Перебросить (пока скрыто)">
-                   <i class="fa-solid fa-dice"></i>
-                 </button>
-                 <i class="fa-solid fa-lock"></i>
-               </div>`
-        }
-      `;
-      const rerollBtn = document.getElementById(`attr-reroll-${playerId}-${field}`);
-      if (rerollBtn) {
-        rerollBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handleReroll(playerId, field);
-        });
-      }
+    return `<div class="chat-message">
+      <span class="chat-author">${escapeHtml(m.playerName || 'Игрок')}:</span>
+      <span class="chat-text">${escapeHtml(m.text)}</span>
+    </div>`;
+  }
+
+  function attachGameHandlers(data, isHost) {
+    attachRoomCodeCopy();
+
+    const leaveBtn = document.getElementById('leave-home-btn');
+    if (leaveBtn) leaveBtn.addEventListener('click', handleLeaveToHome);
+
+    const grid = document.getElementById('players-grid');
+    if (grid) grid.addEventListener('click', onPlayersGridClick);
+
+    const votingCard = document.getElementById('voting-card');
+    if (votingCard) votingCard.addEventListener('click', onVotingCardClick);
+
+    if (isHost) {
+      const situationBtn = document.getElementById('situation-btn');
+      if (situationBtn) situationBtn.addEventListener('click', async () => {
+        try { await api('post', `/${session.code}/situation`, {}); await pollOnce(); }
+        catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
+      });
+
+      const nextRoundBtn = document.getElementById('next-round-btn');
+      if (nextRoundBtn) nextRoundBtn.addEventListener('click', async () => {
+        try { await api('post', `/${session.code}/next-round`, { seconds: 180 }); await pollOnce(); }
+        catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
+      });
+
+      const resetBtn = document.getElementById('reset-game-btn');
+      if (resetBtn) resetBtn.addEventListener('click', handleResetGameConfirm);
+
+      const discussionStartBtn = document.getElementById('discussion-start-btn');
+      if (discussionStartBtn) discussionStartBtn.addEventListener('click', async () => {
+        const input = document.getElementById('discussion-seconds-input');
+        const seconds = Math.min(Math.max(Number(input.value) || 180, 15), 1800);
+        try { await api('post', `/${session.code}/timer/start`, { seconds, label: 'Обсуждение' }); await pollOnce(); }
+        catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
+      });
+
+      const discussionCancelBtn = document.getElementById('discussion-cancel-btn');
+      if (discussionCancelBtn) discussionCancelBtn.addEventListener('click', async () => {
+        try { await api('post', `/${session.code}/timer/cancel`, {}); await pollOnce(); }
+        catch (e) { /* ignore */ }
+      });
+    }
+
+    const chatSendBtn = document.getElementById('chat-send-btn');
+    const chatInput = document.getElementById('chat-input');
+    if (chatSendBtn && chatInput) {
+      const sendChat = async () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        chatInput.value = '';
+        try { await api('post', `/${session.code}/chat`, { text }); await pollOnce(); }
+        catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
+      };
+      chatSendBtn.addEventListener('click', sendChat);
+      chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
     }
   }
 
-  async function handleReroll(playerId, field) {
-    const p = state.players.find((x) => x.id === playerId);
-    if (!p || p.revealed[field]) return;
-
-    try {
-      const res = await axios.post('/api/game/reroll', { field });
-      p[field] = res.data.value;
-      saveState();
-      const row = document.getElementById(`attr-row-${playerId}-${field}`);
-      if (row) {
-        const valueEl = row.querySelector('.attr-value');
-        if (valueEl) valueEl.textContent = p[field];
-        row.classList.add('just-revealed');
-        setTimeout(() => row.classList.remove('just-revealed'), 400);
-      }
-      showToast('Переброшено', `Новая характеристика «${labelForField(field)}» сгенерирована.`, 'fa-dice');
-    } catch (e) {
-      showToast('Ошибка', 'Не удалось перебросить характеристику.', 'fa-triangle-exclamation');
+  async function onPlayersGridClick(e) {
+    const rerollBtn = e.target.closest('[data-action="reroll"]');
+    if (rerollBtn) {
+      e.stopPropagation();
+      const field = rerollBtn.dataset.field;
+      try { await api('post', `/${session.code}/reroll-attr`, { field }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+      return;
+    }
+    const revealHead = e.target.closest('[data-action="reveal"]');
+    if (revealHead) {
+      const field = revealHead.dataset.field;
+      try { await api('post', `/${session.code}/reveal`, { field }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+      return;
+    }
+    const excludeBtn = e.target.closest('[data-action="exclude"]');
+    if (excludeBtn) {
+      const targetId = Number(excludeBtn.dataset.targetId);
+      try { await api('post', `/${session.code}/exclude`, { playerId: targetId }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+      return;
+    }
+    const voteBtn = e.target.closest('[data-action="vote"]');
+    if (voteBtn) {
+      const targetId = Number(voteBtn.dataset.targetId);
+      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
     }
   }
 
-  function labelForField(field) {
-    const f = ATTR_FIELDS.find((x) => x.key === field);
-    return f ? f.label : field;
+  async function onVotingCardClick(e) {
+    const startBtn = e.target.closest('#vote-start-btn');
+    if (startBtn) {
+      const input = document.getElementById('voting-seconds-input');
+      const seconds = Math.min(Math.max(Number(input ? input.value : 60) || 60, 15), 900);
+      try { await api('post', `/${session.code}/vote/start`, { seconds }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+      return;
+    }
+    const finalizeBtn = e.target.closest('#vote-finalize-btn');
+    if (finalizeBtn) {
+      try { await api('post', `/${session.code}/vote/finalize`, {}); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+      return;
+    }
+    const voteBtn = e.target.closest('[data-action="vote"]');
+    if (voteBtn) {
+      const targetId = Number(voteBtn.dataset.targetId);
+      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); await pollOnce(); }
+      catch (err) { showToast('Ошибка', errorMessageFrom(err), 'fa-triangle-exclamation'); }
+    }
   }
 
-  function toggleExclude(playerId) {
-    const p = state.players.find((x) => x.id === playerId);
-    if (!p) return;
-    p.excluded = !p.excluded;
-    saveState();
-    renderGameScreen();
-  }
-
-  // -------------------------------------------------------------------
-  // ПРИВАТНЫЙ ПРОСМОТР СВОЕЙ КАРТОЧКИ («раскрыта для тебя»)
-  // -------------------------------------------------------------------
-
-  function openPeekModal(playerId) {
-    const p = state.players.find((x) => x.id === playerId);
-    if (!p) return;
-
+  function handleResetGameConfirm() {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="panel modal-box peek-box">
-        <div class="peek-badge"><i class="fa-solid fa-user-lock"></i> Только для тебя</div>
-        <i class="fa-solid fa-id-badge modal-icon" style="color:var(--rust-light);"></i>
-        <h3>${escapeHtml(p.name)}</h3>
-        <div class="peek-list">
-          <div class="peek-row">
-            <div class="peek-label"><i class="fa-solid fa-briefcase"></i>Профессия</div>
-            <div class="peek-value">${p.profession}</div>
-          </div>
-          ${ATTR_FIELDS.map((f) => `
-            <div class="peek-row">
-              <div class="peek-label"><i class="fa-solid ${f.icon}"></i>${f.label}</div>
-              <div class="peek-value">${p[f.key]}</div>
-            </div>
-          `).join('')}
-        </div>
-        <p class="peek-hint">Эта информация видна только тебе. Остальным игрокам характеристики по-прежнему открываются через карточку по одной за раунд.</p>
+      <div class="panel modal-box">
+        <i class="fa-solid fa-skull modal-icon" style="color:var(--danger);"></i>
+        <h3>Начать новую игру?</h3>
+        <p>Текущий прогресс (раунды, раскрытые характеристики, исключённые игроки) будет удалён для всех игроков комнаты. Все останутся на своих местах.</p>
         <div class="modal-actions">
-          <button class="btn btn-primary" id="peek-close-btn"><i class="fa-solid fa-eye-slash"></i> Спрятать</button>
+          <button class="btn btn-secondary" id="modal-cancel-btn">Отмена</button>
+          <button class="btn btn-danger" id="modal-confirm-btn"><i class="fa-solid fa-rotate-left"></i> Да, начать заново</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
-    document.getElementById('peek-close-btn').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => overlay.remove());
+    document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
+      overlay.remove();
+      try { await api('post', `/${session.code}/reset`, {}); await pollOnce(); }
+      catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
     });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
-  // -------------------------------------------------------------------
-  // РАУНДЫ И СОБЫТИЯ
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Автоматические модалки: событие раунда и ситуация
+  // ---------------------------------------------------------------------
 
-  async function handleNextRound() {
-    state.round += 1;
-    saveState();
+  function checkAutoModals(data) {
+    const room = data.room;
+    if (!room) return;
 
-    const badge = document.querySelector('.round-badge');
-    if (badge) badge.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Раунд ${state.round}`;
-
-    if (state.round === VOTING_ROUND_THRESHOLD) {
-      showToast('Голосование открыто', 'С этого раунда доступно голосование за исключение игрока.', 'fa-square-poll-vertical');
+    if (seenEventRound === null) {
+      seenEventRound = room.round;
+    } else if (room.event && room.round > seenEventRound) {
+      seenEventRound = room.round;
+      showEventModal(room.event, room.round);
     }
 
-    // Обновляем кнопку голосования и подсказку без полной перерисовки
-    renderGameScreen();
-
-    try {
-      const res = await axios.get('/api/game/event');
-      showEventModal(res.data.event);
-    } catch (e) {
-      showToast('Раунд начат', `Раунд ${state.round} начался.`, 'fa-forward');
+    const sig = room.situation ? JSON.stringify(room.situation) : null;
+    if (seenSituationSig === undefined) {
+      seenSituationSig = sig;
+    } else if (sig && sig !== seenSituationSig) {
+      seenSituationSig = sig;
+      showSituationModal(room.situation);
     }
   }
 
-  function showEventModal(eventText) {
+  function showEventModal(eventText, round) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="panel modal-box">
         <i class="fa-solid fa-triangle-exclamation modal-icon"></i>
-        <h3>Событие раунда ${state.round}</h3>
-        <p>${eventText}</p>
+        <h3>Событие раунда ${round}</h3>
+        <p>${escapeHtml(eventText)}</p>
         <div class="modal-actions">
           <button class="btn btn-primary" id="modal-close-btn"><i class="fa-solid fa-check"></i> Понятно</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
-    document.getElementById('modal-close-btn').addEventListener('click', () => {
-      overlay.remove();
-    });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-  // -------------------------------------------------------------------
-  // СИТУАЦИИ (для озвучивания вслух)
-  // -------------------------------------------------------------------
-
-  async function handleShowSituation() {
-    const btn = document.getElementById('situation-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Загрузка...';
-    }
-    try {
-      const res = await axios.get('/api/game/situation');
-      const s = res.data.situation;
-      if (!state.situationsLog) state.situationsLog = [];
-      state.situationsLog.push({ round: state.round, title: s.title });
-      saveState();
-      showSituationModal(s);
-    } catch (e) {
-      showToast('Ошибка', 'Не удалось загрузить ситуацию.', 'fa-triangle-exclamation');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Ситуация';
-      }
-    }
+    document.getElementById('modal-close-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
   function showSituationModal(s) {
@@ -712,197 +1187,30 @@
         <div class="situation-category"><i class="fa-solid ${s.icon}"></i> ${escapeHtml(s.category)}</div>
         <h3>${escapeHtml(s.title)}</h3>
         <p class="situation-text">${escapeHtml(s.text)}</p>
-        <div class="setup-hint" style="margin-bottom:18px;">Озвучьте эту ситуацию вслух всем участникам и обсудите, как бункер будет действовать.</div>
+        <div class="setup-hint" style="margin-bottom:18px;">Озвучьте эту ситуацию вслух всем участникам и обсудите в чате, как бункер будет действовать.</div>
         <div class="modal-actions">
-          <button class="btn btn-secondary" id="situation-again-btn"><i class="fa-solid fa-rotate"></i> Другая ситуация</button>
           <button class="btn btn-primary" id="situation-close-btn"><i class="fa-solid fa-check"></i> Обсудили</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
     document.getElementById('situation-close-btn').addEventListener('click', () => overlay.remove());
-    document.getElementById('situation-again-btn').addEventListener('click', async () => {
-      const res = await axios.get('/api/game/situation');
-      overlay.remove();
-      showSituationModal(res.data.situation);
-    });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
-  // -------------------------------------------------------------------
-  // ГОЛОСОВАНИЕ (доступно с 3-го раунда)
-  // -------------------------------------------------------------------
-
-  function handleOpenVoting(unlocked) {
-    if (!unlocked) {
-      showToast('Голосование закрыто', `Голосование откроется начиная с ${VOTING_ROUND_THRESHOLD}-го раунда. Сейчас раунд ${state.round}.`, 'fa-lock');
-      return;
-    }
-    openVotingModal();
-  }
-
-  function openVotingModal() {
-    const alive = state.players.filter((p) => !p.excluded);
-    const votes = {};
-    alive.forEach((p) => { votes[p.id] = 0; });
-
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-      <div class="panel modal-box voting-box">
-        <i class="fa-solid fa-square-poll-vertical modal-icon" style="color:var(--danger-light);"></i>
-        <h3>Голосование — раунд ${state.round}</h3>
-        <p>Отмечайте голоса за каждого выжившего. Кандидат с наибольшим числом голосов будет исключён из бункера.</p>
-        <div class="voting-list" id="voting-list">
-          ${alive.map((p) => `
-            <div class="voting-row" id="voting-row-${p.id}">
-              <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)} <span class="voting-prof">— ${p.profession}</span></div>
-              <div class="voting-controls">
-                <button class="vote-btn vote-minus" data-id="${p.id}"><i class="fa-solid fa-minus"></i></button>
-                <span class="vote-count" id="vote-count-${p.id}">0</span>
-                <button class="vote-btn vote-plus" data-id="${p.id}"><i class="fa-solid fa-plus"></i></button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="voting-cancel-btn">Отмена</button>
-          <button class="btn btn-danger" id="voting-confirm-btn"><i class="fa-solid fa-user-slash"></i> Исключить лидера голосования</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    overlay.querySelectorAll('.vote-plus').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = Number(btn.dataset.id);
-        votes[id] += 1;
-        document.getElementById(`vote-count-${id}`).textContent = votes[id];
-      });
-    });
-    overlay.querySelectorAll('.vote-minus').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = Number(btn.dataset.id);
-        votes[id] = Math.max(0, votes[id] - 1);
-        document.getElementById(`vote-count-${id}`).textContent = votes[id];
-      });
-    });
-
-    document.getElementById('voting-cancel-btn').addEventListener('click', () => overlay.remove());
-
-    document.getElementById('voting-confirm-btn').addEventListener('click', () => {
-      const entries = Object.entries(votes);
-      const maxVotes = Math.max(...entries.map(([, v]) => v));
-      if (maxVotes <= 0) {
-        showToast('Нет голосов', 'Отметьте хотя бы один голос перед завершением голосования.', 'fa-triangle-exclamation');
-        return;
-      }
-      const leaders = entries.filter(([, v]) => v === maxVotes).map(([id]) => Number(id));
-
-      overlay.remove();
-
-      if (leaders.length > 1) {
-        showTieModal(leaders, votes);
-      } else {
-        excludePlayer(leaders[0]);
-      }
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-  function showTieModal(leaderIds, votes) {
-    const candidates = state.players.filter((p) => leaderIds.includes(p.id));
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-      <div class="panel modal-box">
-        <i class="fa-solid fa-scale-balanced modal-icon" style="color:var(--warning);"></i>
-        <h3>Ничья в голосовании!</h3>
-        <p>Несколько игроков набрали одинаковое максимальное число голосов (${votes[leaderIds[0]]}). Выберите, кто покидает бункер, по итогам дополнительного обсуждения или переголосования.</p>
-        <div class="voting-list">
-          ${candidates.map((p) => `
-            <div class="voting-row">
-              <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)} <span class="voting-prof">— ${p.profession}</span></div>
-              <button class="btn btn-danger" data-tie-id="${p.id}" style="padding:8px 16px;font-size:12px;">Исключить</button>
-            </div>
-          `).join('')}
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="tie-cancel-btn">Никого не исключать</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    overlay.querySelectorAll('[data-tie-id]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = Number(btn.dataset.tieId);
-        overlay.remove();
-        excludePlayer(id);
-      });
-    });
-    document.getElementById('tie-cancel-btn').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-  function excludePlayer(playerId) {
-    const p = state.players.find((x) => x.id === playerId);
-    if (!p) return;
-    p.excluded = true;
-    saveState();
-    renderGameScreen();
-    showToast('Голосование завершено', `${p.name} исключён(а) из бункера по итогам голосования.`, 'fa-user-slash');
-  }
-
-  // -------------------------------------------------------------------
-  // НОВАЯ ИГРА
-  // -------------------------------------------------------------------
-
-  function handleNewGameClick() {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-      <div class="panel modal-box">
-        <i class="fa-solid fa-skull modal-icon" style="color:var(--danger);"></i>
-        <h3>Начать новую игру?</h3>
-        <p>Текущий прогресс (раунды, раскрытые характеристики, исключённые игроки) будет полностью удалён.</p>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="modal-cancel-btn">Отмена</button>
-          <button class="btn btn-danger" id="modal-confirm-btn"><i class="fa-solid fa-rotate-left"></i> Да, начать заново</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    document.getElementById('modal-cancel-btn').addEventListener('click', () => overlay.remove());
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-      overlay.remove();
-      resetGame();
-    });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
   // TOASTS
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------------
 
   function showToast(title, message, icon) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
+    if (!toastContainer) ensureToastContainer();
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.innerHTML = `
-      <div class="toast-title"><i class="fa-solid ${icon || 'fa-info-circle'}"></i>${title}</div>
-      <div>${message}</div>
+      <div class="toast-title"><i class="fa-solid ${icon || 'fa-info-circle'}"></i>${escapeHtml(title)}</div>
+      <div>${escapeHtml(message)}</div>
     `;
-    container.appendChild(toast);
+    toastContainer.appendChild(toast);
     setTimeout(() => {
       toast.classList.add('fade-out');
       setTimeout(() => toast.remove(), 320);
@@ -911,7 +1219,7 @@
 
   function escapeHtml(str) {
     const div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = str == null ? '' : String(str);
     return div.innerHTML;
   }
 

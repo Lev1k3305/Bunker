@@ -1208,3 +1208,495 @@ input[type="range"]::-moz-range-thumb {
   .game-topbar { padding: 12px 14px; }
   .players-grid { grid-template-columns: 1fr; }
 }
+
+/* =====================================================================
+   МУЛЬТИПЛЕЕР — главный экран (создание / вход в комнату)
+   ===================================================================== */
+
+.mp-home-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mp-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.mp-tab {
+  font-family: var(--font-head);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: var(--bg-panel-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  padding: 12px 22px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  transition: all 0.2s ease;
+}
+
+.mp-tab:hover { color: var(--rust-light); border-color: var(--rust); }
+
+.mp-tab.active {
+  background: linear-gradient(135deg, var(--rust-light), var(--rust));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 18px rgba(184, 70, 14, 0.35);
+}
+
+.mp-panel {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 36px;
+}
+
+.room-code-input {
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-head);
+  font-size: 34px;
+  letter-spacing: 14px;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  color: var(--rust-light);
+  padding: 16px 10px 16px 24px;
+  text-transform: uppercase;
+}
+.room-code-input:focus { outline: none; border-color: var(--rust); }
+.room-code-input::placeholder { color: var(--text-faint); letter-spacing: 14px; }
+
+/* Бейдж с кодом комнаты — виден на всех игровых экранах */
+.room-code-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 18px;
+  width: fit-content;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 20px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.room-code-badge .code-text {
+  font-family: var(--font-head);
+  letter-spacing: 4px;
+  color: var(--rust-light);
+  font-size: 15px;
+}
+
+.room-code-badge.small {
+  margin: 0;
+  padding: 5px 12px;
+}
+.room-code-badge.small .code-text { font-size: 13px; letter-spacing: 2px; }
+
+.copy-code-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-metal);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  transition: all 0.15s ease;
+}
+.copy-code-btn:hover { color: var(--rust-light); border-color: var(--rust); }
+
+/* =====================================================================
+   ВЫБОР МЕСТА / СЕТКА ИГРОКОВ
+   ===================================================================== */
+
+.seat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.seat-cell {
+  border: 1px solid var(--border-metal);
+  border-radius: 10px;
+  padding: 14px 12px;
+  background: var(--bg-panel-2);
+  text-align: center;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.seat-cell.empty {
+  cursor: pointer;
+  border-style: dashed;
+}
+.seat-cell.empty:hover {
+  border-color: var(--toxic);
+  background: rgba(139, 181, 44, 0.06);
+}
+
+.seat-cell.taken {
+  border-color: var(--border-rust);
+  background: linear-gradient(160deg, rgba(184,70,14,0.08), var(--bg-panel-2));
+}
+
+.seat-cell.taken.mine {
+  border-color: var(--toxic);
+  box-shadow: 0 0 0 1px var(--toxic-dark) inset;
+}
+
+.seat-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  color: var(--rust-light);
+  font-family: var(--font-head);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+}
+
+.seat-state {
+  font-size: 12px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.seat-name {
+  font-family: var(--font-head);
+  font-size: 14px;
+  color: var(--text-main);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.seat-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.me-badge {
+  background: var(--toxic-dark);
+  color: #fff;
+  font-family: var(--font-head);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.host-badge {
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.excluded-badge {
+  color: var(--danger-light);
+  font-size: 12px;
+}
+
+.name-claim-panel {
+  max-width: 420px;
+  margin: 16px auto 0;
+  padding: 22px;
+  text-align: center;
+}
+.name-claim-panel.hidden { display: none; }
+
+.name-input-lg {
+  width: 100%;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 16px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.name-input-lg:focus { outline: none; border-color: var(--rust); }
+
+.player-name-static {
+  flex: 1;
+  font-family: var(--font-head);
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.player-card.is-me {
+  border-color: var(--toxic-dark);
+  box-shadow: 0 0 0 1px rgba(139,181,44,0.25) inset, 0 10px 26px rgba(0,0,0,0.5);
+}
+
+.attr-row.mine.hidden-state { border-style: dashed; }
+.attr-row.mine .attr-value { color: var(--text-main); }
+/* Собственные скрытые характеристики всегда видны игроку — показываем значение приглушённо, но читаемо */
+.attr-row.mine.hidden-state .attr-value {
+  max-height: 200px;
+  padding: 0 12px 12px;
+  color: var(--text-dim);
+}
+
+.vote-target-btn {
+  width: calc(100% - 24px);
+  margin: 0 12px 14px;
+  font-family: var(--font-head);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: var(--bg-panel-2);
+  color: var(--danger-light);
+  border: 1px solid var(--border-rust);
+  border-radius: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+.vote-target-btn:hover { background: rgba(198,43,43,0.12); }
+.vote-target-btn.chosen {
+  background: linear-gradient(135deg, #8f2323, var(--danger));
+  color: #fff;
+  border-color: transparent;
+}
+
+/* =====================================================================
+   ИГРОВОЙ ЭКРАН — колонки: карточки игроков + сайдбар (голосование/чат)
+   ===================================================================== */
+
+.main-columns {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 90px;
+}
+
+.side-panel .panel {
+  padding: 18px 18px 16px;
+}
+
+@media (max-width: 980px) {
+  .main-columns { grid-template-columns: 1fr; }
+  .side-panel { position: static; }
+}
+
+.timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-head);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.timer-pill.voting {
+  border-color: var(--danger);
+  color: var(--danger-light);
+}
+
+.timer-pill.discussion {
+  border-color: var(--toxic-dark);
+  color: var(--toxic);
+}
+
+.timer-pill span.urgent {
+  color: var(--danger-light);
+  animation: blink-warn 0.8s infinite;
+}
+
+.timer-pill span.expired {
+  color: var(--text-faint);
+}
+
+/* Voting card */
+.voting-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.voting-progress-note {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+.voting-card .voting-list {
+  max-height: 320px;
+}
+
+.vote-btn-small {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-metal);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+.vote-btn-small:hover { border-color: var(--danger); color: var(--danger-light); }
+.vote-btn-small.chosen { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.voting-start-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.seconds-input {
+  width: 70px;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.seconds-input:focus { outline: none; border-color: var(--rust); }
+
+.seconds-label {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.btn-xs {
+  padding: 8px 14px;
+  font-size: 11px;
+}
+
+/* Chat card */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.discussion-timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-metal);
+}
+
+.chat-messages {
+  max-height: 320px;
+  min-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
+.chat-message {
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.5;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.chat-message.system {
+  background: transparent;
+  border: 1px dashed var(--border-metal);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.chat-author {
+  font-family: var(--font-head);
+  color: var(--rust-light);
+  margin-right: 6px;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--bg-black);
+  border: 1px solid var(--border-metal);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.chat-input:focus { outline: none; border-color: var(--rust); }
+
+@media (max-width: 640px) {
+  .mp-panel { padding: 28px 20px; }
+  .room-code-input { font-size: 24px; letter-spacing: 8px; padding: 14px 10px 14px 18px; }
+  .seat-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
