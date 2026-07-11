@@ -51,7 +51,7 @@
   let pollHandle = null;
   let tickHandle = null;
 
-  let homeTab = 'create';
+  let homeScreen = 'landing';   // 'landing' | 'play' | 'settings'
   let createCount = 8;
   let joinCodeDraft = '';
   let pendingSlot = null;
@@ -77,7 +77,7 @@
     if (session && session.code) {
       startPolling();
     } else if (roomFromUrl) {
-      homeTab = 'join';
+      homeScreen = 'play';
       joinCodeDraft = roomFromUrl;
       renderHome();
     } else {
@@ -307,6 +307,14 @@
   // ---------------------------------------------------------------------
 
   function renderHome() {
+    if (homeScreen === 'play') renderPlayScreen();
+    else if (homeScreen === 'settings') renderSettingsScreen();
+    else renderLandingScreen();
+  }
+
+  // --- СТРАНИЦА 1: лендинг / главное меню ---------------------------------
+
+  function renderLandingScreen() {
     currentView = 'home';
     appEl.innerHTML = `
       <div class="screen mp-home-screen">
@@ -315,47 +323,139 @@
             <i class="fa-solid fa-radiation"></i>
             <h1>БУНКЕР</h1>
           </div>
-          <div class="subtitle">сетевая игра на выживание<span class="divider"></span>каждый играет со своего устройства</div>
+          <div class="subtitle">сетевая игра на выживание — каждый со своего устройства</div>
 
-          <div class="mp-tabs">
-            <button class="mp-tab ${homeTab === 'create' ? 'active' : ''}" id="tab-create"><i class="fa-solid fa-plus"></i> Создать комнату</button>
-            <button class="mp-tab ${homeTab === 'join' ? 'active' : ''}" id="tab-join"><i class="fa-solid fa-right-to-bracket"></i> Войти по коду</button>
+          <div class="landing-layout">
+            <div class="landing-actions">
+              <button class="btn btn-primary btn-lg" id="landing-play-btn"><i class="fa-solid fa-play"></i> Играть</button>
+              <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> Настройки</button>
+              <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-solid fa-heart"></i> Поддержать проект</button>
+            </div>
+
+            <div class="panel rules-panel landing-howto">
+              <div class="stamp-corner">Секретно</div>
+              <div class="rules-title"><i class="fa-solid fa-circle-info"></i> Как это работает</div>
+              <div class="rules-grid rules-grid-single">
+                <div class="rule-item"><i class="fa-solid fa-1"></i><div>
+                  <div class="rule-h">Создайте комнату</div>
+                  <div class="rule-t">Вы создаёте комнату и получаете короткий код.</div>
+                </div></div>
+                <div class="rule-item"><i class="fa-solid fa-2"></i><div>
+                  <div class="rule-h">Позовите игроков</div>
+                  <div class="rule-t">Передайте код остальным — каждый заходит на этот же сайт со своего устройства.</div>
+                </div></div>
+                <div class="rule-item"><i class="fa-solid fa-3"></i><div>
+                  <div class="rule-h">Займите место</div>
+                  <div class="rule-t">Каждый выбирает своё место в лобби и вписывает имя.</div>
+                </div></div>
+                <div class="rule-item"><i class="fa-solid fa-4"></i><div>
+                  <div class="rule-h">Хост управляет игрой</div>
+                  <div class="rule-t">Первый занявший место становится хостом и запускает катастрофу.</div>
+                </div></div>
+                <div class="rule-item"><i class="fa-solid fa-5"></i><div>
+                  <div class="rule-h">Ваша тайна — только ваша</div>
+                  <div class="rule-t">Свои характеристики видите только вы — другим они не видны, пока вы сами их не раскроете.</div>
+                </div></div>
+              </div>
+            </div>
           </div>
 
-          <div class="panel mp-panel">
-            ${homeTab === 'create' ? createPanelHtml() : joinPanelHtml()}
-          </div>
-
-          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
         </div>
       </div>
     `;
 
-    document.getElementById('tab-create').addEventListener('click', () => { homeTab = 'create'; renderHome(); });
-    document.getElementById('tab-join').addEventListener('click', () => { homeTab = 'join'; renderHome(); });
+    document.getElementById('landing-play-btn').addEventListener('click', () => { homeScreen = 'play'; renderHome(); });
+    document.getElementById('landing-settings-btn').addEventListener('click', () => { homeScreen = 'settings'; renderHome(); });
+    document.getElementById('landing-support-btn').addEventListener('click', () => {
+      showToast('Спасибо!', 'Раздел поддержки проекта скоро появится.', 'fa-heart');
+    });
+  }
 
-    if (homeTab === 'create') {
-      const slider = document.getElementById('create-count-slider');
-      const countVal = document.getElementById('create-count-val');
-      slider.addEventListener('input', () => {
-        countVal.textContent = slider.value;
-        createCount = Number(slider.value);
-      });
-      document.getElementById('create-room-btn').addEventListener('click', handleCreateRoom);
-    } else {
-      const input = document.getElementById('join-code-input');
-      input.addEventListener('input', () => {
-        joinCodeDraft = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
-        input.value = joinCodeDraft;
-      });
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleJoinByCode(); });
-      document.getElementById('join-room-btn').addEventListener('click', handleJoinByCode);
-    }
+  // --- СТРАНИЦА 2: играть (создать комнату / войти по коду) ---------------
+
+  function renderPlayScreen() {
+    currentView = 'home';
+    appEl.innerHTML = `
+      <div class="screen mp-home-screen">
+        <div class="container">
+          <button class="btn btn-ghost back-btn" id="play-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+          <div class="top-title">
+            <i class="fa-solid fa-radiation"></i>
+            <h1>ИГРАТЬ</h1>
+          </div>
+          <div class="subtitle">создайте комнату или войдите в существующую</div>
+
+          <div class="play-layout">
+            <div class="panel mp-panel play-panel">
+              ${createPanelHtml()}
+            </div>
+
+            <div class="play-divider"><span>или</span></div>
+
+            <div class="panel mp-panel play-panel">
+              ${joinPanelHtml()}
+            </div>
+          </div>
+
+          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('play-back-btn').addEventListener('click', () => { homeScreen = 'landing'; renderHome(); });
+
+    const slider = document.getElementById('create-count-slider');
+    const countVal = document.getElementById('create-count-val');
+    slider.addEventListener('input', () => {
+      countVal.textContent = slider.value;
+      createCount = Number(slider.value);
+    });
+    document.getElementById('create-room-btn').addEventListener('click', handleCreateRoom);
+
+    const input = document.getElementById('join-code-input');
+    input.addEventListener('input', () => {
+      joinCodeDraft = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+      input.value = joinCodeDraft;
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleJoinByCode(); });
+    document.getElementById('join-room-btn').addEventListener('click', handleJoinByCode);
+  }
+
+  // --- СТРАНИЦА 3: настройки (заглушка) ------------------------------------
+
+  function renderSettingsScreen() {
+    currentView = 'home';
+    appEl.innerHTML = `
+      <div class="screen mp-home-screen">
+        <div class="container">
+          <button class="btn btn-ghost back-btn" id="settings-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+          <div class="top-title">
+            <i class="fa-solid fa-gear"></i>
+            <h1>НАСТРОЙКИ</h1>
+          </div>
+
+          <div class="panel mp-panel settings-empty-panel">
+            <i class="fa-solid fa-screwdriver-wrench settings-empty-icon"></i>
+            <div class="settings-empty-title">В разработке</div>
+            <div class="settings-empty-text">Этот раздел скоро появится. Следите за обновлениями.</div>
+            <button class="btn btn-secondary" id="settings-back-btn-2"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+          </div>
+
+          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
+        </div>
+      </div>
+    `;
+
+    const back = () => { homeScreen = 'landing'; renderHome(); };
+    document.getElementById('settings-back-btn').addEventListener('click', back);
+    document.getElementById('settings-back-btn-2').addEventListener('click', back);
   }
 
   function createPanelHtml() {
     return `
       <div class="stamp-corner">Секретно</div>
+      <div class="rules-title"><i class="fa-solid fa-plus"></i> Создать комнату</div>
       <div class="setup-field">
         <label>Количество мест в игре: <span class="val" id="create-count-val">${createCount}</span></label>
         <input type="range" id="create-count-slider" min="4" max="16" step="1" value="${createCount}" />
@@ -379,13 +479,14 @@
 
   function joinPanelHtml() {
     return `
+      <div class="rules-title"><i class="fa-solid fa-right-to-bracket"></i> Войти по коду</div>
       <div class="setup-field" style="text-align:center;">
         <label>Код комнаты</label>
         <input type="text" id="join-code-input" class="room-code-input" placeholder="XXXXX" maxlength="5" value="${escapeHtml(joinCodeDraft)}" autocomplete="off" autocapitalize="characters" />
         <div class="setup-hint">Получите код у того, кто создал комнату, и введите его здесь, чтобы выбрать своё место.</div>
       </div>
       <div class="setup-actions">
-        <button class="btn btn-primary" id="join-room-btn"><i class="fa-solid fa-right-to-bracket"></i> Войти в комнату</button>
+        <button class="btn btn-primary" id="join-room-btn"><i class="fa-solid fa-right-to-bracket"></i> Войти</button>
       </div>
     `;
   }
@@ -544,7 +645,7 @@
     lastData = null;
     currentView = null;
     pendingSlot = null;
-    homeTab = 'create';
+    homeScreen = 'landing';
     renderHome();
   }
 

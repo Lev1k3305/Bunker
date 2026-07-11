@@ -1700,3 +1700,159 @@ input[type="range"]::-moz-range-thumb {
   .room-code-input { font-size: 24px; letter-spacing: 8px; padding: 14px 10px 14px 18px; }
   .seat-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
+
+/* =====================================================================
+   ЛЕНДИНГ / СТРАНИЦА «ИГРАТЬ» / СТРАНИЦА «НАСТРОЙКИ»
+   ===================================================================== */
+
+.back-btn {
+  margin-bottom: 18px;
+}
+
+.btn-lg {
+  font-size: 17px;
+  padding: 18px 46px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* --- Страница 1: лендинг --- */
+
+.landing-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 26px;
+  align-items: start;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.landing-actions .btn-secondary {
+  width: 100%;
+  justify-content: center;
+  padding: 15px 26px;
+  font-size: 13px;
+}
+
+.landing-howto {
+  padding: 28px 30px;
+}
+
+.rules-grid-single {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+  .landing-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Страница 2: играть --- */
+
+.play-layout {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  align-items: stretch;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.play-panel {
+  padding: 32px 30px;
+}
+
+.play-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 70px;
+}
+
+.play-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border-metal);
+}
+
+.play-divider span {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-black);
+  color: var(--text-faint);
+  font-family: var(--font-head);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border: 1px solid var(--border-metal);
+  border-radius: 20px;
+}
+
+@media (max-width: 900px) {
+  .play-layout {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .play-divider {
+    width: 100%;
+    height: 20px;
+  }
+  .play-divider::before {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 1px;
+  }
+}
+
+/* --- Страница 3: настройки --- */
+
+.settings-empty-panel {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 60px 30px;
+  text-align: center;
+}
+
+.settings-empty-icon {
+  font-size: 56px;
+  color: var(--text-faint);
+  margin-bottom: 20px;
+  display: block;
+}
+
+.settings-empty-title {
+  font-family: var(--font-head);
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.settings-empty-text {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 640px) {
+  .landing-actions .btn-lg { font-size: 15px; padding: 15px 20px; }
+  .play-panel { padding: 26px 20px; }
+}
