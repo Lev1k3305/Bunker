@@ -6,6 +6,7 @@
   'use strict';
 
   const SESSION_KEY = 'bunker_mp_session_v1';
+  const DEFAULT_NAME_KEY = 'bunker_default_name_v1';
   const POLL_INTERVAL = 2500;
   const API_BASE = '/api/room';
 
@@ -128,6 +129,17 @@
   function clearSession() {
     session = null;
     try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function getDefaultName() {
+    try { return localStorage.getItem(DEFAULT_NAME_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function setDefaultName(name) {
+    try {
+      if (name) localStorage.setItem(DEFAULT_NAME_KEY, name);
+      else localStorage.removeItem(DEFAULT_NAME_KEY);
+    } catch (e) { /* ignore */ }
   }
 
   // ---------------------------------------------------------------------
@@ -312,6 +324,56 @@
     else renderLandingScreen();
   }
 
+  // --- Общий блок «Правила игры» (используется в лобби, настройках и подсказке) ---
+
+  function fullRulesGridHtml() {
+    return `
+      <div class="rules-grid">
+        <div class="rule-item"><i class="fa-solid fa-1"></i><div>
+          <div class="rule-h">Катастрофа и бункер</div>
+          <div class="rule-t">Хост объявляет катастрофу, уничтожившую мир на поверхности, и параметры бункера. Мест на всех не хватит.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-2"></i><div>
+          <div class="rule-h">Секретное досье — только для тебя</div>
+          <div class="rule-t">Каждый получает карточку: профессия видна сразу, а возраст, здоровье, фобия, хобби, черты характера, инвентарь — видны только тебе, пока ты сам их не раскроешь.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-3"></i><div>
+          <div class="rule-h">Раунды и раскрытие</div>
+          <div class="rule-t">В каждом раунде игроки по очереди раскрывают характеристики и рассказывают о себе вслух, чтобы убедить остальных оставить их в бункере.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-4"></i><div>
+          <div class="rule-h">Ситуации</div>
+          <div class="rule-t">Хост периодически озвучивает случайные ситуации в бункере — их нужно обсудить в чате или вслух и принять решение сообща.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-5"></i><div>
+          <div class="rule-h">Голосование с таймером</div>
+          <div class="rule-t">Начиная с 3-го раунда открывается голосование на время: все решают, кто покинет бункер. Исключённый выбывает из игры.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-6"></i><div>
+          <div class="rule-h">Победа</div>
+          <div class="rule-t">Игра продолжается, пока не останется ровно столько выживших, сколько мест в бункере — они и побеждают.</div>
+        </div></div>
+      </div>
+    `;
+  }
+
+  function showRulesModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box rules-modal-box">
+        <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
+        ${fullRulesGridHtml()}
+        <div class="modal-actions" style="margin-top:18px;">
+          <button class="btn btn-primary" id="rules-modal-close-btn"><i class="fa-solid fa-check"></i> Понятно</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('rules-modal-close-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  }
+
   // --- СТРАНИЦА 1: лендинг / главное меню ---------------------------------
 
   function renderLandingScreen() {
@@ -426,6 +488,7 @@
 
   function renderSettingsScreen() {
     currentView = 'home';
+    const savedName = getDefaultName();
     appEl.innerHTML = `
       <div class="screen mp-home-screen">
         <div class="container">
@@ -435,11 +498,34 @@
             <h1>НАСТРОЙКИ</h1>
           </div>
 
-          <div class="panel mp-panel settings-empty-panel">
-            <i class="fa-solid fa-screwdriver-wrench settings-empty-icon"></i>
-            <div class="settings-empty-title">В разработке</div>
-            <div class="settings-empty-text">Этот раздел скоро появится. Следите за обновлениями.</div>
-            <button class="btn btn-secondary" id="settings-back-btn-2"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+          <div class="settings-layout">
+            <div class="panel mp-panel settings-section">
+              <div class="rules-title"><i class="fa-solid fa-id-badge"></i> Имя по умолчанию</div>
+              <div class="setup-hint" style="margin-top:0;margin-bottom:14px;">Это имя будет автоматически предложено, когда вы занимаете место в новой комнате. Можно изменить его в любой момент перед подтверждением.</div>
+              <div class="setup-field">
+                <input type="text" id="default-name-input" class="name-input-lg" placeholder="Например, Алекс" maxlength="24" autocomplete="off" value="${escapeHtml(savedName)}" />
+              </div>
+              <div class="setup-actions" style="margin-top:16px;">
+                <button class="btn btn-primary" id="default-name-save-btn"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+              </div>
+            </div>
+
+            <div class="panel rules-panel settings-section">
+              <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры</div>
+              ${fullRulesGridHtml()}
+            </div>
+
+            <div class="panel mp-panel settings-section">
+              <div class="rules-title"><i class="fa-solid fa-circle-info"></i> О проекте</div>
+              <div class="about-text">
+                <p>«БУНКЕР» — бесплатная сетевая версия популярной настольной игры-ролевой дискуссии о выживших в бункере после катастрофы. Игра создана независимыми разработчиками и не связана с правообладателями оригинальной настольной игры.</p>
+                <p>Каждый игрок заходит со своего устройства по коду комнаты — сервер хранит характеристики персонажей приватно и раскрывает их только по решению самого игрока.</p>
+                <p>Проект развивается силами энтузиастов. Если он вам нравится — расскажите о нём друзьям или поддержите разработку.</p>
+              </div>
+              <div class="setup-actions" style="margin-top:20px;">
+                <button class="btn btn-secondary" id="settings-support-btn"><i class="fa-solid fa-heart"></i> Поддержать проект</button>
+              </div>
+            </div>
           </div>
 
           <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
@@ -449,7 +535,17 @@
 
     const back = () => { homeScreen = 'landing'; renderHome(); };
     document.getElementById('settings-back-btn').addEventListener('click', back);
-    document.getElementById('settings-back-btn-2').addEventListener('click', back);
+
+    document.getElementById('default-name-save-btn').addEventListener('click', () => {
+      const input = document.getElementById('default-name-input');
+      const name = (input.value || '').trim().slice(0, 24);
+      setDefaultName(name);
+      showToast('Сохранено', name ? `Имя по умолчанию: ${escapeHtml(name)}.` : 'Имя по умолчанию очищено.', 'fa-floppy-disk');
+    });
+
+    document.getElementById('settings-support-btn').addEventListener('click', () => {
+      showToast('Спасибо!', 'Раздел поддержки проекта скоро появится.', 'fa-heart');
+    });
   }
 
   function createPanelHtml() {
@@ -568,7 +664,7 @@
             <div class="panel name-claim-panel ${pendingSlot ? '' : 'hidden'}" id="name-claim-panel">
               ${pendingSlot ? `
                 <div class="rules-title" style="margin-bottom:14px;"><i class="fa-solid fa-user-pen"></i> Место №${pendingSlot}</div>
-                <input type="text" id="seat-name-input" class="name-input-lg" placeholder="Твоё имя" maxlength="24" autocomplete="off" />
+                <input type="text" id="seat-name-input" class="name-input-lg" placeholder="Твоё имя" maxlength="24" autocomplete="off" value="${escapeHtml(getDefaultName())}" />
                 <div class="modal-actions" style="margin-top:16px;">
                   <button class="btn btn-secondary" id="seat-cancel-btn">Отмена</button>
                   <button class="btn btn-primary" id="seat-confirm-btn"><i class="fa-solid fa-check"></i> Занять место</button>
@@ -628,6 +724,7 @@
     try {
       const res = await api('post', `/${session.code}/join`, { slot: pendingSlot, name });
       setSession(session.code, res.token);
+      setDefaultName(name);
       pendingSlot = null;
       lastData = res;
       render();
@@ -717,32 +814,7 @@
 
           <div class="panel rules-panel">
             <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
-            <div class="rules-grid">
-              <div class="rule-item"><i class="fa-solid fa-1"></i><div>
-                <div class="rule-h">Катастрофа и бункер</div>
-                <div class="rule-t">Хост объявляет катастрофу, уничтожившую мир на поверхности, и параметры бункера. Мест на всех не хватит.</div>
-              </div></div>
-              <div class="rule-item"><i class="fa-solid fa-2"></i><div>
-                <div class="rule-h">Секретное досье — только для тебя</div>
-                <div class="rule-t">Каждый получает карточку: профессия видна сразу, а возраст, здоровье, фобия, хобби, черты характера, инвентарь — видны только тебе, пока ты сам их не раскроешь.</div>
-              </div></div>
-              <div class="rule-item"><i class="fa-solid fa-3"></i><div>
-                <div class="rule-h">Раунды и раскрытие</div>
-                <div class="rule-t">В каждом раунде игроки по очереди раскрывают характеристики и рассказывают о себе вслух, чтобы убедить остальных оставить их в бункере.</div>
-              </div></div>
-              <div class="rule-item"><i class="fa-solid fa-4"></i><div>
-                <div class="rule-h">Ситуации</div>
-                <div class="rule-t">Хост периодически озвучивает случайные ситуации в бункере — их нужно обсудить в чате или вслух и принять решение сообща.</div>
-              </div></div>
-              <div class="rule-item"><i class="fa-solid fa-5"></i><div>
-                <div class="rule-h">Голосование с таймером</div>
-                <div class="rule-t">Начиная с 3-го раунда открывается голосование на время: все решают, кто покинет бункер. Исключённый выбывает из игры.</div>
-              </div></div>
-              <div class="rule-item"><i class="fa-solid fa-6"></i><div>
-                <div class="rule-h">Победа</div>
-                <div class="rule-t">Игра продолжается, пока не останется ровно столько выживших, сколько мест в бункере — они и побеждают.</div>
-              </div></div>
-            </div>
+            ${fullRulesGridHtml()}
           </div>
 
           <div class="panel mp-panel">
@@ -882,6 +954,7 @@
               <button class="btn btn-secondary" id="next-round-btn"><i class="fa-solid fa-forward"></i> Следующий раунд</button>
               <button class="btn btn-ghost" id="reset-game-btn"><i class="fa-solid fa-rotate-left"></i> Новая игра</button>
             ` : ''}
+            <button class="btn btn-ghost" id="rules-hint-btn" title="Правила игры"><i class="fa-solid fa-circle-question"></i></button>
             <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
           </div>
         </div>
@@ -1107,6 +1180,9 @@
 
     const leaveBtn = document.getElementById('leave-home-btn');
     if (leaveBtn) leaveBtn.addEventListener('click', handleLeaveToHome);
+
+    const rulesHintBtn = document.getElementById('rules-hint-btn');
+    if (rulesHintBtn) rulesHintBtn.addEventListener('click', showRulesModal);
 
     const grid = document.getElementById('players-grid');
     if (grid) grid.addEventListener('click', onPlayersGridClick);
