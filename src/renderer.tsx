@@ -6,9 +6,9 @@ export const renderer = jsxRenderer(({ children }) => {
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>БУНКЕР — настольная игра на выживание</title>
+        <title>SHELTER — сетевая игра на выживание</title>
         <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-        <meta name="description" content="Электронный помощник для настольной игры «Бункер»: генератор персонажей, катастроф и параметров убежища." />
+        <meta name="description" content="SHELTER — сетевая игра на выживание: генератор персонажей, катастроф и параметров убежища, каждый игрок со своего устройства." />
 
         {/* Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />

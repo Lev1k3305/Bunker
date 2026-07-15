@@ -1,5 +1,5 @@
 // =====================================================================
-// БУНКЕР — клиентское мультиплеерное приложение (комнаты, реальные игроки)
+// SHELTER — клиентское мультиплеерное приложение (комнаты, реальные игроки)
 // =====================================================================
 
 (function () {
@@ -362,7 +362,7 @@
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="panel modal-box rules-modal-box">
-        <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
+        <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Shelter»</div>
         ${fullRulesGridHtml()}
         <div class="modal-actions" style="margin-top:18px;">
           <button class="btn btn-primary" id="rules-modal-close-btn"><i class="fa-solid fa-check"></i> Понятно</button>
@@ -383,7 +383,7 @@
         <div class="container">
           <div class="top-title">
             <i class="fa-solid fa-radiation"></i>
-            <h1>БУНКЕР</h1>
+            <h1>SHELTER</h1>
           </div>
           <div class="subtitle">сетевая игра на выживание — каждый со своего устройства</div>
 
@@ -422,7 +422,7 @@
             </div>
           </div>
 
-          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
+          <div class="app-footer">© SHELTER — сетевая игра на выживание</div>
         </div>
       </div>
     `;
@@ -460,7 +460,7 @@
             </div>
           </div>
 
-          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
+          <div class="app-footer">© SHELTER — сетевая игра на выживание</div>
         </div>
       </div>
     `;
@@ -518,7 +518,7 @@
             <div class="panel mp-panel settings-section">
               <div class="rules-title"><i class="fa-solid fa-circle-info"></i> О проекте</div>
               <div class="about-text">
-                <p>«БУНКЕР» — бесплатная сетевая версия популярной настольной игры-ролевой дискуссии о выживших в бункере после катастрофы. Игра создана независимыми разработчиками и не связана с правообладателями оригинальной настольной игры.</p>
+                <p>«SHELTER» — бесплатная сетевая игра-ролевая дискуссия о выживших в укрытии после катастрофы. Проект создан независимыми разработчиками и не связан с правообладателями каких-либо коммерческих настольных игр.</p>
                 <p>Каждый игрок заходит со своего устройства по коду комнаты — сервер хранит характеристики персонажей приватно и раскрывает их только по решению самого игрока.</p>
                 <p>Проект развивается силами энтузиастов. Если он вам нравится — расскажите о нём друзьям или поддержите разработку.</p>
               </div>
@@ -528,7 +528,7 @@
             </div>
           </div>
 
-          <div class="app-footer">© БУНКЕР — сетевая игра на выживание</div>
+          <div class="app-footer">© SHELTER — сетевая игра на выживание</div>
         </div>
       </div>
     `;
@@ -677,7 +677,7 @@
             <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-left"></i> Выйти в главное меню</button>
           </div>
 
-          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+          <div class="app-footer">© SHELTER — сетевая настольная игра на выживание</div>
         </div>
       </div>
     `;
@@ -813,7 +813,7 @@
           <div class="subtitle">знакомство перед спуском<span class="divider"></span>${claimedCount} / ${players.length} игроков в комнате</div>
 
           <div class="panel rules-panel">
-            <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Бункер»</div>
+            <div class="rules-title"><i class="fa-solid fa-book-open"></i> Правила игры «Shelter»</div>
             ${fullRulesGridHtml()}
           </div>
 
@@ -839,7 +839,7 @@
             <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i> Покинуть комнату</button>
           </div>
 
-          <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+          <div class="app-footer">© SHELTER — сетевая настольная игра на выживание</div>
         </div>
       </div>
     `;
@@ -901,7 +901,7 @@
             `}
           </div>
         </div>
-        <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+        <div class="app-footer">© SHELTER — сетевая настольная игра на выживание</div>
       </div>
     `;
 
@@ -944,7 +944,7 @@
     appEl.innerHTML = `
       <div class="screen" style="padding-top:0;">
         <div class="game-topbar">
-          <div class="brand"><i class="fa-solid fa-radiation"></i> БУНКЕР</div>
+          <div class="brand"><i class="fa-solid fa-radiation"></i> SHELTER</div>
           <div class="room-code-badge small">${escapeHtml(room.code)}</div>
           <div class="round-badge"><i class="fa-solid fa-hourglass-half"></i> Раунд ${room.round}</div>
           ${timer ? `<div class="timer-pill ${timer.type}">${timer.type === 'voting' ? '🗳' : '⏱'} <span data-ends-at="${timer.endsAt}">--:--</span></div>` : ''}
@@ -984,7 +984,7 @@
           </aside>
         </div>
 
-        <div class="app-footer">© БУНКЕР — сетевая настольная игра на выживание</div>
+        <div class="app-footer">© SHELTER — сетевая настольная игра на выживание</div>
       </div>
     `;
 

@@ -24,7 +24,7 @@ app.get('/', (c) => {
       <div class="loading-screen" id="loading-screen">
         <div class="loading-content">
           <i class="fa-solid fa-radiation loading-icon"></i>
-          <div class="loading-text">БУНКЕР</div>
+          <div class="loading-text">SHELTER</div>
         </div>
       </div>
     </div>
