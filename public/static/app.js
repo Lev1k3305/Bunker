@@ -10,6 +10,9 @@
   const POLL_INTERVAL = 2500;
   const API_BASE = '/api/room';
 
+  // TODO: замените на ссылку своего Telegram-канала (например 'https://t.me/my_channel')
+  const TELEGRAM_CHANNEL_URL = 'https://t.me/';
+
   const ATTR_FIELDS = [
     { key: 'ageGender', label: 'Возраст / пол', icon: 'fa-id-card' },
     { key: 'health', label: 'Здоровье', icon: 'fa-heart-pulse' },
@@ -391,7 +394,7 @@
             <div class="landing-actions">
               <button class="btn btn-primary btn-lg" id="landing-play-btn"><i class="fa-solid fa-play"></i> Играть</button>
               <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> Настройки</button>
-              <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-solid fa-heart"></i> Поддержать проект</button>
+              <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-brands fa-telegram"></i> Наш Telegram-канал</button>
             </div>
 
             <div class="panel rules-panel landing-howto">
@@ -430,7 +433,7 @@
     document.getElementById('landing-play-btn').addEventListener('click', () => { homeScreen = 'play'; renderHome(); });
     document.getElementById('landing-settings-btn').addEventListener('click', () => { homeScreen = 'settings'; renderHome(); });
     document.getElementById('landing-support-btn').addEventListener('click', () => {
-      showToast('Спасибо!', 'Раздел поддержки проекта скоро появится.', 'fa-heart');
+      window.open(TELEGRAM_CHANNEL_URL, '_blank', 'noopener');
     });
   }
 
@@ -520,10 +523,10 @@
               <div class="about-text">
                 <p>«SHELTER» — бесплатная сетевая игра-ролевая дискуссия о выживших в укрытии после катастрофы. Проект создан независимыми разработчиками и не связан с правообладателями каких-либо коммерческих настольных игр.</p>
                 <p>Каждый игрок заходит со своего устройства по коду комнаты — сервер хранит характеристики персонажей приватно и раскрывает их только по решению самого игрока.</p>
-                <p>Проект развивается силами энтузиастов. Если он вам нравится — расскажите о нём друзьям или поддержите разработку.</p>
+                <p>Проект развивается силами энтузиастов. Если он вам нравится — подпишитесь на наш Telegram-канал, там мы рассказываем о новых возможностях и обновлениях.</p>
               </div>
               <div class="setup-actions" style="margin-top:20px;">
-                <button class="btn btn-secondary" id="settings-support-btn"><i class="fa-solid fa-heart"></i> Поддержать проект</button>
+                <button class="btn btn-secondary" id="settings-support-btn"><i class="fa-brands fa-telegram"></i> Наш Telegram-канал</button>
               </div>
             </div>
           </div>
@@ -544,7 +547,7 @@
     });
 
     document.getElementById('settings-support-btn').addEventListener('click', () => {
-      showToast('Спасибо!', 'Раздел поддержки проекта скоро появится.', 'fa-heart');
+      window.open(TELEGRAM_CHANNEL_URL, '_blank', 'noopener');
     });
   }
 
