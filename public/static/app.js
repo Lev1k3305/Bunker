@@ -10,8 +10,7 @@
   const POLL_INTERVAL = 2500;
   const API_BASE = '/api/room';
 
-  // TODO: замените на ссылку своего Telegram-канала (например 'https://t.me/my_channel')
-  const TELEGRAM_CHANNEL_URL = 'https://t.me/';
+  const TELEGRAM_CHANNEL_URL = 'https://t.me/Prosto_Progers';
 
   const ATTR_FIELDS = [
     { key: 'ageGender', label: 'Возраст / пол', icon: 'fa-id-card' },
@@ -390,39 +389,11 @@
           </div>
           <div class="subtitle">сетевая игра на выживание — каждый со своего устройства</div>
 
-          <div class="landing-layout">
-            <div class="landing-actions">
-              <button class="btn btn-primary btn-lg" id="landing-play-btn"><i class="fa-solid fa-play"></i> Играть</button>
-              <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> Настройки</button>
-              <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-brands fa-telegram"></i> Наш Telegram-канал</button>
-            </div>
-
-            <div class="panel rules-panel landing-howto">
-              <div class="stamp-corner">Секретно</div>
-              <div class="rules-title"><i class="fa-solid fa-circle-info"></i> Как это работает</div>
-              <div class="rules-grid rules-grid-single">
-                <div class="rule-item"><i class="fa-solid fa-1"></i><div>
-                  <div class="rule-h">Создайте комнату</div>
-                  <div class="rule-t">Вы создаёте комнату и получаете короткий код.</div>
-                </div></div>
-                <div class="rule-item"><i class="fa-solid fa-2"></i><div>
-                  <div class="rule-h">Позовите игроков</div>
-                  <div class="rule-t">Передайте код остальным — каждый заходит на этот же сайт со своего устройства.</div>
-                </div></div>
-                <div class="rule-item"><i class="fa-solid fa-3"></i><div>
-                  <div class="rule-h">Займите место</div>
-                  <div class="rule-t">Каждый выбирает своё место в лобби и вписывает имя.</div>
-                </div></div>
-                <div class="rule-item"><i class="fa-solid fa-4"></i><div>
-                  <div class="rule-h">Хост управляет игрой</div>
-                  <div class="rule-t">Первый занявший место становится хостом и запускает катастрофу.</div>
-                </div></div>
-                <div class="rule-item"><i class="fa-solid fa-5"></i><div>
-                  <div class="rule-h">Ваша тайна — только ваша</div>
-                  <div class="rule-t">Свои характеристики видите только вы — другим они не видны, пока вы сами их не раскроете.</div>
-                </div></div>
-              </div>
-            </div>
+          <div class="landing-actions landing-actions-center">
+            <button class="btn btn-primary btn-lg" id="landing-play-btn"><i class="fa-solid fa-play"></i> Играть</button>
+            <button class="btn btn-secondary" id="landing-howto-btn"><i class="fa-solid fa-circle-question"></i> Как начать игру</button>
+            <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> Настройки</button>
+            <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-brands fa-telegram"></i> Наш Telegram-канал</button>
           </div>
 
           <div class="app-footer">© SHELTER — сетевая игра на выживание</div>
@@ -431,10 +402,60 @@
     `;
 
     document.getElementById('landing-play-btn').addEventListener('click', () => { homeScreen = 'play'; renderHome(); });
+    document.getElementById('landing-howto-btn').addEventListener('click', showHowToModal);
     document.getElementById('landing-settings-btn').addEventListener('click', () => { homeScreen = 'settings'; renderHome(); });
     document.getElementById('landing-support-btn').addEventListener('click', () => {
       window.open(TELEGRAM_CHANNEL_URL, '_blank', 'noopener');
     });
+  }
+
+  function howToGridHtml() {
+    return `
+      <div class="rules-grid rules-grid-single">
+        <div class="rule-item"><i class="fa-solid fa-1"></i><div>
+          <div class="rule-h">Создайте комнату</div>
+          <div class="rule-t">Вы создаёте комнату и получаете короткий код.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-2"></i><div>
+          <div class="rule-h">Позовите игроков</div>
+          <div class="rule-t">Передайте код остальным — каждый заходит на этот же сайт со своего устройства.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-3"></i><div>
+          <div class="rule-h">Займите место</div>
+          <div class="rule-t">Каждый выбирает своё место в лобби и вписывает имя.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-4"></i><div>
+          <div class="rule-h">Хост управляет игрой</div>
+          <div class="rule-t">Первый занявший место становится хостом и запускает катастрофу.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-5"></i><div>
+          <div class="rule-h">Ваша тайна — только ваша</div>
+          <div class="rule-t">Свои характеристики видите только вы — другим они не видны, пока вы сами их не раскроете.</div>
+        </div></div>
+        <div class="rule-item"><i class="fa-solid fa-6"></i><div>
+          <div class="rule-h">Выживайте</div>
+          <div class="rule-t">Раскрывайте характеристики в свою пользу, убеждайте остальных — с 3-го раунда начинается голосование на исключение. Полные правила — в разделе «Настройки».</div>
+        </div></div>
+      </div>
+    `;
+  }
+
+  function showHowToModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box rules-modal-box">
+        <div class="stamp-corner">Секретно</div>
+        <div class="rules-title"><i class="fa-solid fa-circle-question"></i> Как начать игру</div>
+        ${howToGridHtml()}
+        <div class="modal-actions" style="margin-top:18px;">
+          <button class="btn btn-primary" id="howto-modal-close-btn"><i class="fa-solid fa-check"></i> Понятно</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('howto-modal-close-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
   // --- СТРАНИЦА 2: играть (создать комнату / войти по коду) ---------------
