@@ -42,6 +42,8 @@
     empty_message: 'Сообщение не может быть пустым.',
     only_host_or_expired: 'Завершить голосование раньше времени может только хост.',
     player_not_found: 'Игрок не найден.',
+    cannot_vote_self: 'Нельзя голосовать за самого себя.',
+    game_ended: 'Игра уже завершена — начните новую игру.',
   };
 
   // ---------------------------------------------------------------------
@@ -250,8 +252,9 @@
   function computeView(data) {
     if (!session || !session.token) return 'seat-select';
     if (!data || !data.room) return 'seat-select';
+    if (data.room.status === 'ended') return 'victory';
     if (data.room.status === 'catastrophe') return 'catastrophe';
-    if (data.room.status === 'game' || data.room.status === 'ended') return 'game';
+    if (data.room.status === 'game') return 'game';
     return 'lobby';
   }
 
@@ -276,6 +279,7 @@
     else if (view === 'lobby') renderLobby(data);
     else if (view === 'catastrophe') renderCatastrophe(data);
     else if (view === 'game') renderGame(data);
+    else if (view === 'victory') renderVictory(data);
     else renderHome();
 
     restoreInputs(preserved);
@@ -353,7 +357,7 @@
         </div></div>
         <div class="rule-item"><i class="fa-solid fa-6"></i><div>
           <div class="rule-h">Победа</div>
-          <div class="rule-t">Игра продолжается, пока не останется ровно столько выживших, сколько мест в бункере — они и побеждают.</div>
+          <div class="rule-t">Вместимость бункера всегда меньше числа выживших — это видно на экране катастрофы. Игра продолжается, пока не останется ровно столько игроков, сколько мест — они автоматически побеждают.</div>
         </div></div>
       </div>
     `;
@@ -913,7 +917,9 @@
             <div class="bunker-param"><div class="label"><i class="fa-solid fa-layer-group"></i>Этажность</div><div class="value">${escapeHtml(bunker.floors || '')}</div></div>
             <div class="bunker-param"><div class="label"><i class="fa-solid fa-door-open"></i>Доп. помещение</div><div class="value">${escapeHtml(bunker.extraRoom || '')}</div></div>
             <div class="bunker-param"><div class="label"><i class="fa-solid fa-drumstick-bite"></i>Запасы провизии</div><div class="value">${escapeHtml(bunker.foodSupply || '')}</div></div>
+            <div class="bunker-param bunker-param-capacity"><div class="label"><i class="fa-solid fa-people-roof"></i>Вместимость бункера</div><div class="value">${bunker.capacity ? `${bunker.capacity} чел.` : '—'}</div></div>
           </div>
+          ${bunker.capacity ? `<div class="setup-hint capacity-hint"><i class="fa-solid fa-circle-exclamation"></i> В бункер спустится больше людей, чем в нём есть мест! Побеждают те, кто останется, когда выживших станет ровно ${bunker.capacity}.</div>` : ''}
 
           <div class="catastrophe-actions">
             ${isHost ? `
@@ -985,7 +991,7 @@
 
         <div class="survivors-bar-wrap">
           <div class="survivors-bar-label">
-            <span><i class="fa-solid fa-people-roof"></i> Выживших в бункере: ${aliveCount} / ${totalCount}</span>
+            <span><i class="fa-solid fa-people-roof"></i> Выживших в бункере: ${aliveCount} / ${totalCount}${room.bunker && room.bunker.capacity ? ` (цель — ${room.bunker.capacity})` : ''}</span>
             <span>${votingUnlocked ? '<i class="fa-solid fa-unlock" style="color:var(--toxic);"></i> Голосование доступно' : `Голосование откроется в раунде ${room.votingThreshold}`}</span>
           </div>
           <div class="survivors-bar"><div class="survivors-bar-fill ${pct < 40 ? 'over' : ''}" style="width:${pct}%"></div></div>
@@ -996,6 +1002,7 @@
           <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-ruler-combined"></i>Бункер</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.size : '—')}</div></div>
           <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-hourglass-half"></i>Срок</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.duration : '—')}</div></div>
           <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-drumstick-bite"></i>Провизия</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.foodSupply : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-people-roof"></i>Вместимость</div><div class="mini-value">${room.bunker && room.bunker.capacity ? `${room.bunker.capacity} чел.` : '—'}</div></div>
         </div>
 
         <div class="main-columns">
@@ -1013,6 +1020,72 @@
     `;
 
     attachGameHandlers(data, isHost);
+  }
+
+  // ---------------------------------------------------------------------
+  // ПОБЕДА (room.status === 'ended') — вместимость бункера достигнута
+  // ---------------------------------------------------------------------
+
+  function renderVictory(data) {
+    const room = data.room;
+    const me = data.me;
+    const isHost = !!(me && room.hostPlayerId === me.id);
+    const players = data.players || [];
+    const winners = players.filter((p) => p.claimed && !p.excluded);
+    const losers = players.filter((p) => p.claimed && p.excluded);
+    const capacity = room.bunker ? room.bunker.capacity : null;
+
+    appEl.innerHTML = `
+      <div class="catastrophe-screen victory-screen">
+        <div class="catastrophe-alert victory-alert"><i class="fa-solid fa-trophy"></i> Бункер укомплектован — игра окончена <i class="fa-solid fa-trophy"></i></div>
+        <div class="panel catastrophe-card victory-card">
+          ${roomCodeBadgeHtml(room.code)}
+          <i class="fa-solid fa-trophy catastrophe-icon victory-icon"></i>
+          <h2 class="catastrophe-title">Победители заняли бункер!</h2>
+          <p class="catastrophe-desc">${capacity ? `В бункере было ${capacity} мест — именно столько выживших и остались внутри.` : 'В бункере закончились свободные места.'}</p>
+
+          <div class="victory-winners-list">
+            ${winners.map((p) => `
+              <div class="victory-winner-item">
+                <i class="fa-solid fa-user-check"></i>
+                <span class="winner-name">${escapeHtml(p.name)}</span>
+                <span class="winner-prof">${escapeHtml(p.profession || '')}</span>
+              </div>
+            `).join('') || '<div class="setup-hint">Победители не определены.</div>'}
+          </div>
+
+          ${losers.length ? `
+            <div class="victory-losers-wrap">
+              <div class="victory-losers-title"><i class="fa-solid fa-user-slash"></i> Остались на поверхности</div>
+              <div class="victory-losers-list">
+                ${losers.map((p) => `<span class="victory-loser-chip">${escapeHtml(p.name)}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="catastrophe-actions">
+            ${isHost ? `
+              <button class="btn btn-primary" id="new-game-btn"><i class="fa-solid fa-rotate-left"></i> Новая игра</button>
+            ` : `
+              <div class="setup-hint"><i class="fa-solid fa-hourglass-half"></i> Хост скоро начнёт новую игру...</div>
+            `}
+            <button class="btn btn-ghost" id="leave-home-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i> Выйти в главное меню</button>
+          </div>
+        </div>
+        <div class="app-footer">© SHELTER — сетевая настольная игра на выживание</div>
+      </div>
+    `;
+
+    attachRoomCodeCopy();
+
+    const newGameBtn = document.getElementById('new-game-btn');
+    if (newGameBtn) newGameBtn.addEventListener('click', async () => {
+      try { await api('post', `/${session.code}/reset`, {}); await pollOnce(); }
+      catch (e) { showToast('Ошибка', errorMessageFrom(e), 'fa-triangle-exclamation'); }
+    });
+
+    const leaveBtn = document.getElementById('leave-home-btn');
+    if (leaveBtn) leaveBtn.addEventListener('click', handleLeaveToHome);
   }
 
   function renderPlayerCardMp(p, ctx) {

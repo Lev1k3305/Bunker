@@ -8,6 +8,7 @@ import {
   TRAITS_POSITIVE, TRAITS_NEGATIVE, INVENTORY, EXTRA_INFO,
   pick, pickUnique,
   randomCatastrophe, randomBunkerParams, randomEvent, randomSituation,
+  type BunkerParams,
 } from './data'
 
 type Bindings = { DB: D1Database }
@@ -213,6 +214,36 @@ async function addSystemMessage(db: D1Database, code: string, text: string) {
   ).bind(code, text).run();
 }
 
+// ---------------------------------------------------------------------
+// Проверка условия победы: вместимость бункера меньше числа игроков —
+// как только число невыгнанных (живых) выживших сравнивается с вместимостью
+// (или становится меньше), игра автоматически завершается победой оставшихся.
+// Победители нигде отдельно не хранятся — ими считаются все claimed-игроки
+// с excluded=0 в момент, когда room.status стал 'ended' (после этого больше
+// никаких исключений не происходит).
+// ---------------------------------------------------------------------
+
+async function checkAndApplyWinCondition(db: D1Database, code: string) {
+  const room = await getRoom(db, code);
+  if (!room || room.status === 'ended' || !room.bunker_json) return;
+
+  let bunker: any;
+  try { bunker = JSON.parse(room.bunker_json as string); } catch { return; }
+  const capacity = Number(bunker?.capacity);
+  if (!capacity || capacity <= 0) return;
+
+  const playerRows = (await getPlayers(db, code)) as any[];
+  const alive = playerRows.filter((p) => p.claimed && !p.excluded);
+  if (alive.length === 0 || alive.length > capacity) return;
+
+  await db.prepare(`UPDATE rooms SET status='ended', timer_json=NULL WHERE code=?`).bind(code).run();
+  const names = alive.map((p) => p.name).join(', ');
+  await addSystemMessage(
+    db, code,
+    `🏆 Бункер укомплектован (${alive.length}/${capacity} мест)! Победители: ${names}. Игра окончена.`
+  );
+}
+
 async function touchRoom(db: D1Database, code: string) {
   await db.prepare(`UPDATE rooms SET updated_at = datetime('now') WHERE code = ?`).bind(code).run();
 }
@@ -343,7 +374,7 @@ rooms.post('/:code/start', async (c) => {
   const extras = pickUnique(EXTRA_INFO, n);
 
   const catastrophe = randomCatastrophe();
-  const bunker = randomBunkerParams();
+  const bunker = randomBunkerParams(claimedCount);
 
   const batch = [];
   for (let i = 0; i < n; i++) {
@@ -395,7 +426,8 @@ rooms.post('/:code/reroll-bunker', async (c) => {
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
-  const bunker = randomBunkerParams();
+  const claimedCount = ((await getPlayers(db, code)) as any[]).filter((p) => p.claimed).length;
+  const bunker = randomBunkerParams(claimedCount);
   await db.prepare(`UPDATE rooms SET bunker_json=? WHERE code=?`).bind(JSON.stringify(bunker), code).run();
   return c.json({ bunker });
 });
@@ -487,6 +519,7 @@ rooms.post('/:code/exclude', async (c) => {
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status === 'ended') return c.json({ error: 'game_ended' }, 400);
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
@@ -499,6 +532,8 @@ rooms.post('/:code/exclude', async (c) => {
   await addSystemMessage(db, code, newExcluded
     ? `❌ ${(target as any).name} исключён(а) из бункера.`
     : `✅ ${(target as any).name} возвращён(а) в бункер.`);
+
+  if (newExcluded) await checkAndApplyWinCondition(db, code);
 
   return c.json({ ok: true });
 });
@@ -516,6 +551,7 @@ rooms.post('/:code/next-round', async (c) => {
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status === 'ended') return c.json({ error: 'game_ended' }, 400);
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
@@ -544,6 +580,7 @@ rooms.post('/:code/situation', async (c) => {
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status === 'ended') return c.json({ error: 'game_ended' }, 400);
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
@@ -568,6 +605,7 @@ rooms.post('/:code/timer/start', async (c) => {
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status === 'ended') return c.json({ error: 'game_ended' }, 400);
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
@@ -605,6 +643,7 @@ rooms.post('/:code/vote/start', async (c) => {
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status === 'ended') return c.json({ error: 'game_ended' }, 400);
   const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
 
@@ -637,6 +676,7 @@ rooms.post('/:code/vote/cast', async (c) => {
   const me = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
   if (!me) return c.json({ error: 'not_joined' }, 403);
   if ((me as any).excluded) return c.json({ error: 'excluded_cannot_vote' }, 403);
+  if (targetPlayerId === (me as any).id) return c.json({ error: 'cannot_vote_self' }, 400);
 
   const activeVote = await getActiveVote(db, code);
   if (!activeVote) return c.json({ error: 'no_active_vote' }, 400);
@@ -700,6 +740,7 @@ rooms.post('/:code/vote/finalize', async (c) => {
     const target = await db.prepare('SELECT * FROM players WHERE id = ?').bind(excludedPlayerId).first();
     await db.prepare('UPDATE players SET excluded = 1 WHERE id = ?').bind(excludedPlayerId).run();
     await addSystemMessage(db, code, `🗳 Голосование завершено: ${target ? (target as any).name : 'игрок'} исключён(а) из бункера (${tally[excludedPlayerId]} голос(ов)).`);
+    await checkAndApplyWinCondition(db, code);
   } else if (tie) {
     await addSystemMessage(db, code, `🗳 Голосование завершено ничьей — никто не исключён. Требуется обсуждение или повторное голосование.`);
   } else {

@@ -255,6 +255,7 @@ export interface BunkerParams {
   floors: string;
   extraRoom: string;
   foodSupply: string;
+  capacity: number;      // сколько человек реально может выжить в бункере (меньше числа игроков)
 }
 
 export const BUNKER_SIZES: string[] = [
@@ -294,13 +295,24 @@ export const FOOD_SUPPLIES: string[] = [
   "Обнаружен дополнительный склад консервов на соседнем уровне (+30%)",
 ];
 
-export function randomBunkerParams(): BunkerParams {
+// Вместимость бункера всегда меньше числа выживших, которые спустились внутрь —
+// это и создаёт основной конфликт игры: кого-то придётся исключить, чтобы
+// оставшимся хватило места. Отсекаем от 1 до половины игроков (но оставляем
+// как минимум 2 места на победу).
+export function randomBunkerCapacity(totalPlayers: number): number {
+  const maxCut = Math.max(1, Math.floor(totalPlayers / 2));
+  const cut = 1 + Math.floor(Math.random() * maxCut);
+  return Math.max(2, totalPlayers - cut);
+}
+
+export function randomBunkerParams(totalPlayers: number = 8): BunkerParams {
   return {
     size: pick(BUNKER_SIZES),
     duration: pick(BUNKER_DURATIONS),
     floors: pick(BUNKER_FLOORS),
     extraRoom: pick(BUNKER_EXTRA_ROOMS),
     foodSupply: pick(FOOD_SUPPLIES),
+    capacity: randomBunkerCapacity(totalPlayers),
   };
 }
 
