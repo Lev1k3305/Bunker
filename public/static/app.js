@@ -261,6 +261,7 @@
   function render() {
     const data = lastData;
     const view = data ? computeView(data) : 'home';
+    const isViewChange = view !== currentView; // true только при переходе между экранами, не при фоновом поллинге
 
     if (data && data.room && data.room.status !== lastKnownStatus) {
       if (data.room.status === 'catastrophe') {
@@ -281,6 +282,14 @@
     else if (view === 'game') renderGame(data);
     else if (view === 'victory') renderVictory(data);
     else renderHome();
+
+    // Анимацию появления экрана проигрываем только при реальном переходе между экранами
+    // (например, лобби -> катастрофа), а не при каждом фоновом обновлении данных того же
+    // экрана поллингом раз в 2.5 сек — иначе экран будет заметно "мигать".
+    if (isViewChange) {
+      const screenEl = appEl.querySelector('.screen');
+      if (screenEl) screenEl.classList.add('view-enter');
+    }
 
     restoreInputs(preserved);
     restoreChatScroll(chatScroll);
@@ -385,7 +394,7 @@
   function renderLandingScreen() {
     currentView = 'home';
     appEl.innerHTML = `
-      <div class="screen mp-home-screen">
+      <div class="screen mp-home-screen view-enter">
         <div class="container">
           <div class="top-title">
             <i class="fa-solid fa-radiation"></i>
@@ -467,7 +476,7 @@
   function renderPlayScreen() {
     currentView = 'home';
     appEl.innerHTML = `
-      <div class="screen mp-home-screen">
+      <div class="screen mp-home-screen view-enter">
         <div class="container">
           <button class="btn btn-ghost back-btn" id="play-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
           <div class="top-title">
@@ -518,7 +527,7 @@
     currentView = 'home';
     const savedName = getDefaultName();
     appEl.innerHTML = `
-      <div class="screen mp-home-screen">
+      <div class="screen mp-home-screen view-enter">
         <div class="container">
           <button class="btn btn-ghost back-btn" id="settings-back-btn"><i class="fa-solid fa-arrow-left"></i> Назад</button>
           <div class="top-title">

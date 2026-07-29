@@ -222,7 +222,13 @@ a { color: inherit; }
   min-height: 100vh;
   width: 100%;
   padding: 24px 16px 60px;
-  animation: fade-in 0.5s ease;
+}
+
+/* Анимация появления применяется только при смене экрана (лобби -> катастрофа и т.п.),
+   а не при каждом фоновом обновлении данных того же экрана (см. render() в app.js) —
+   иначе получается заметное "мигание" при поллинге раз в 2.5 сек. */
+.screen.view-enter {
+  animation: fade-in 0.35s ease;
 }
 
 @keyframes fade-in {
