@@ -287,7 +287,7 @@
     // (например, лобби -> катастрофа), а не при каждом фоновом обновлении данных того же
     // экрана поллингом раз в 2.5 сек — иначе экран будет заметно "мигать".
     if (isViewChange) {
-      const screenEl = appEl.querySelector('.screen');
+      const screenEl = appEl.querySelector('.screen, .catastrophe-screen');
       if (screenEl) screenEl.classList.add('view-enter');
     }
 
@@ -337,6 +337,27 @@
     if (homeScreen === 'play') renderPlayScreen();
     else if (homeScreen === 'settings') renderSettingsScreen();
     else renderLandingScreen();
+  }
+
+  // --- Атмосферный декоративный фон для «сцен» (катастрофа / победа / бункер) ---
+  // Полностью статичный (без бесконечных CSS-анимаций), чтобы не вызывать
+  // повторное "мигание" при перерисовке во время поллинга раз в 2.5с —
+  // единственный визуальный эффект появления навешивается через класс
+  // .view-enter на корневой элемент экрана (см. render()), который
+  // добавляется только при реальном переходе между экранами.
+  function sceneBackdropHtml(theme) {
+    return `
+      <div class="scene-backdrop theme-${theme}" aria-hidden="true">
+        <div class="scene-glow"></div>
+        <div class="scene-grid"></div>
+        <span class="scene-dot" style="top:14%;left:10%;"></span>
+        <span class="scene-dot" style="top:22%;left:82%;"></span>
+        <span class="scene-dot" style="top:68%;left:6%;"></span>
+        <span class="scene-dot" style="top:78%;left:90%;"></span>
+        <span class="scene-dot" style="top:45%;left:94%;"></span>
+        <span class="scene-dot" style="top:52%;left:3%;"></span>
+      </div>
+    `;
   }
 
   // --- Общий блок «Правила игры» (используется в лобби, настройках и подсказке) ---
@@ -787,11 +808,13 @@
     const isHostSeat = ctx.hostId && p.id === ctx.hostId;
     if (!p.claimed) {
       return `<div class="seat-cell empty" data-slot="${p.slot}">
+        <span class="seat-light"></span>
         <div class="seat-num">${p.slot}</div>
         <div class="seat-state"><i class="fa-solid fa-user-plus"></i> Свободно</div>
       </div>`;
     }
-    return `<div class="seat-cell taken ${p.isMe ? 'mine' : ''}" data-slot="${p.slot}">
+    return `<div class="seat-cell taken ${p.isMe ? 'mine' : ''} ${p.excluded ? 'excluded' : ''}" data-slot="${p.slot}">
+      <span class="seat-light"></span>
       <div class="seat-num">${p.slot}</div>
       <div class="seat-name">${escapeHtml(p.name)}</div>
       <div class="seat-badges">
@@ -854,8 +877,9 @@
             ${fullRulesGridHtml()}
           </div>
 
-          <div class="panel mp-panel">
-            <div class="rules-title"><i class="fa-solid fa-signature"></i> Игроки в лобби</div>
+          <div class="panel mp-panel bunker-scene-panel">
+            ${sceneBackdropHtml('bunker')}
+            <div class="rules-title"><i class="fa-solid fa-signature"></i> Отсеки бункера — кто уже внутри</div>
             <div class="seat-grid" id="seat-grid">
               ${players.map((p) => seatCellHtml(p, { hostId: room.hostPlayerId, clickable: false })).join('')}
             </div>
@@ -913,6 +937,7 @@
 
     appEl.innerHTML = `
       <div class="catastrophe-screen">
+        ${sceneBackdropHtml('danger')}
         <div class="catastrophe-alert"><i class="fa-solid fa-triangle-exclamation"></i> Внимание — глобальная катастрофа <i class="fa-solid fa-triangle-exclamation"></i></div>
         <div class="panel catastrophe-card">
           ${roomCodeBadgeHtml(room.code)}
@@ -1015,8 +1040,11 @@
         </div>
 
         <div class="main-columns">
-          <div class="players-grid" id="players-grid">
-            ${players.filter((p) => p.claimed).map((p) => renderPlayerCardMp(p, { isHost, room, data })).join('')}
+          <div class="players-grid-wrap bunker-scene-panel">
+            ${sceneBackdropHtml('bunker')}
+            <div class="players-grid" id="players-grid">
+              ${players.filter((p) => p.claimed).map((p) => renderPlayerCardMp(p, { isHost, room, data })).join('')}
+            </div>
           </div>
           <aside class="side-panel">
             <div class="panel voting-card" id="voting-card">${renderVotingCardHtml(data, isHost)}</div>
@@ -1046,6 +1074,7 @@
 
     appEl.innerHTML = `
       <div class="catastrophe-screen victory-screen">
+        ${sceneBackdropHtml('safe')}
         <div class="catastrophe-alert victory-alert"><i class="fa-solid fa-trophy"></i> Бункер укомплектован — игра окончена <i class="fa-solid fa-trophy"></i></div>
         <div class="panel catastrophe-card victory-card">
           ${roomCodeBadgeHtml(room.code)}

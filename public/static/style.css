@@ -563,6 +563,55 @@ input[type="range"]::-moz-range-thumb {
 .name-input::placeholder { color: var(--text-faint); }
 
 /* =====================================================================
+   СЦЕНЫ — атмосферный декоративный фон (катастрофа / победа / бункер)
+   Полностью статичны (без бесконечных CSS-анимаций): любая "дышащая"
+   анимация здесь при поллинге раз в 2.5с приводила бы к повторному
+   "миганию" при полной перерисовке экрана — поэтому фон статичный,
+   а всё «оживление» — это одноразовые эффекты при .view-enter
+   (см. render() в app.js — класс добавляется только при реальном
+   переходе между экранами, не при фоновом обновлении данных).
+   ===================================================================== */
+
+.scene-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.scene-backdrop .scene-glow {
+  position: absolute;
+  inset: -25%;
+  background: radial-gradient(circle at 50% 12%, var(--scene-glow-color), transparent 62%);
+}
+
+.scene-backdrop .scene-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 42px);
+  -webkit-mask-image: radial-gradient(circle at 50% 28%, black, transparent 78%);
+  mask-image: radial-gradient(circle at 50% 28%, black, transparent 78%);
+}
+
+.scene-backdrop .scene-dot {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  filter: blur(1px);
+  background: var(--scene-dot-color);
+  opacity: 0.5;
+}
+
+.scene-backdrop.theme-danger { --scene-glow-color: rgba(255,77,77,0.16); --scene-dot-color: rgba(255,120,60,0.7); }
+.scene-backdrop.theme-safe   { --scene-glow-color: rgba(139,181,44,0.16); --scene-dot-color: rgba(180,220,90,0.7); }
+.scene-backdrop.theme-bunker { --scene-glow-color: rgba(90,140,200,0.14); --scene-dot-color: rgba(120,170,220,0.6); }
+
+/* =====================================================================
    CATASTROPHE REVEAL SCREEN
    ===================================================================== */
 
@@ -574,7 +623,11 @@ input[type="range"]::-moz-range-thumb {
   min-height: 100vh;
   text-align: center;
   padding: 30px 16px;
+  position: relative;
+  overflow: hidden;
 }
+
+.catastrophe-screen > *:not(.scene-backdrop) { position: relative; z-index: 1; }
 
 .catastrophe-alert {
   font-family: var(--font-head);
@@ -605,6 +658,33 @@ input[type="range"]::-moz-range-thumb {
   color: var(--rust-light);
   margin-bottom: 18px;
   filter: drop-shadow(0 0 30px rgba(232, 99, 31, 0.5));
+}
+
+/* Разовые эффекты появления «сцены» — проигрываются только при реальном
+   переходе на экран (класс .view-enter навешивается в render()), а не
+   при каждом фоновом обновлении данных того же экрана поллингом. */
+.catastrophe-screen.view-enter .catastrophe-card {
+  animation: card-rise 0.5s ease;
+}
+.catastrophe-screen.view-enter .catastrophe-icon {
+  animation: icon-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s both;
+}
+.catastrophe-screen.victory-screen.view-enter .victory-icon {
+  animation: trophy-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s both;
+}
+
+@keyframes card-rise {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes icon-pop {
+  0% { transform: scale(0.35) rotate(-10deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes trophy-pop {
+  0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
 }
 
 .catastrophe-title {
@@ -1449,6 +1529,21 @@ input[type="range"]::-moz-range-thumb {
   padding: 40px 36px;
 }
 
+/* Панель со сценой бункера (капсулы игроков в лобби / на игровом экране) */
+.bunker-scene-panel {
+  position: relative;
+  overflow: hidden;
+}
+.bunker-scene-panel > *:not(.scene-backdrop) { position: relative; z-index: 1; }
+
+.players-grid-wrap {
+  position: relative;
+  padding: 18px 0 4px;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.players-grid-wrap .players-grid { position: relative; z-index: 1; }
+
 .room-code-input {
   width: 100%;
   text-align: center;
@@ -1522,8 +1617,8 @@ input[type="range"]::-moz-range-thumb {
 
 .seat-cell {
   border: 1px solid var(--border-metal);
-  border-radius: 10px;
-  padding: 14px 12px;
+  border-radius: 16px 16px 8px 8px;
+  padding: 22px 12px 14px;
   background: var(--bg-panel-2);
   text-align: center;
   position: relative;
@@ -1547,6 +1642,40 @@ input[type="range"]::-moz-range-thumb {
 .seat-cell.taken.mine {
   border-color: var(--toxic);
   box-shadow: 0 0 0 1px var(--toxic-dark) inset;
+}
+
+.seat-cell.taken.excluded {
+  border-color: var(--danger);
+  background: linear-gradient(160deg, rgba(198,43,43,0.1), var(--bg-panel-2));
+  opacity: 0.75;
+}
+
+/* Индикатор-лампочка отсека бункера — статичный цвет, без анимации свецения,
+   чтобы не вызывать мигание при каждом поллинге. */
+.seat-light {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-metal);
+}
+
+.seat-cell.taken .seat-light {
+  background: var(--toxic);
+  box-shadow: 0 0 7px 2px rgba(139,181,44,0.55);
+}
+
+.seat-cell.taken.mine .seat-light {
+  background: var(--rust-light);
+  box-shadow: 0 0 7px 2px rgba(232,99,31,0.6);
+}
+
+.seat-cell.taken.excluded .seat-light {
+  background: var(--danger-light);
+  box-shadow: 0 0 7px 2px rgba(255,77,77,0.5);
 }
 
 .seat-num {
