@@ -2197,3 +2197,64 @@ input[type="range"]::-moz-range-thumb {
 }
 .rules-modal-box .rules-title { justify-content: center; }
 .rules-modal-box .rules-grid { text-align: left; }
+
+/* =====================================================================
+   LANGUAGE SWITCHER (persistent, outside #app, survives re-renders)
+   ===================================================================== */
+
+.lang-switcher-btn {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 10002;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-metal);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lang-switcher-btn:hover {
+  border-color: var(--rust);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+}
+
+.lang-switcher-btn:active { transform: translateY(0); }
+
+.lang-switcher-btn .lang-code {
+  color: var(--text-faint);
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lang-switcher-btn .lang-code.active {
+  color: var(--warning);
+  background: rgba(217, 167, 33, 0.12);
+}
+
+.lang-switcher-btn .lang-sep {
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+
+@media (max-width: 640px) {
+  .lang-switcher-btn {
+    top: 10px;
+    left: 10px;
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+}
