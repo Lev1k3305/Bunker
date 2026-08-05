@@ -522,6 +522,527 @@
     return str;
   }
 
+  // Словарь перевода игрового контента (генерируется на сервере всегда на русском —
+  // переводим на лету на клиенте при lang === 'en'). Ключ = точный русский текст.
+  const CONTENT_EN = {
+    'Хирург-трансплантолог': 'Transplant Surgeon',
+    'Детский нейрохирург': 'Pediatric Neurosurgeon',
+    'Врач-токсиколог': 'Toxicologist',
+    'Реаниматолог-анестезиолог': 'Resuscitation Anesthesiologist',
+    'Инфекционист-эпидемиолог': 'Infectious Disease Epidemiologist',
+    'Ветеринар-хирург крупных животных': 'Large Animal Veterinary Surgeon',
+    'Стоматолог-хирург': 'Dental Surgeon',
+    'Фармаколог-биохимик': 'Pharmacologist-Biochemist',
+    'Психиатр-криминалист': 'Forensic Psychiatrist',
+    'Врач скорой помощи (парамедик)': 'Paramedic',
+    'Генетик-репродуктолог': 'Reproductive Geneticist',
+    'Радиолог-онколог': 'Radiation Oncologist',
+    'Инженер-атомщик (реакторщик)': 'Nuclear Engineer (Reactor Specialist)',
+    'Инженер систем жизнеобеспечения': 'Life Support Systems Engineer',
+    'Гидроинженер-мелиоратор': 'Hydraulic Reclamation Engineer',
+    'Инженер-биотехнолог': 'Biotechnology Engineer',
+    'Инженер по вентиляции и климат-контролю': 'HVAC and Climate Control Engineer',
+    'Инженер-электрик высоковольтных сетей': 'High-Voltage Electrical Engineer',
+    'Инженер по опреснению воды': 'Water Desalination Engineer',
+    'Инженер-строитель (сейсмоустойчивые конструкции)': 'Structural Engineer (Seismic-Resistant Design)',
+    'Инженер-робототехник': 'Robotics Engineer',
+    'Инженер-эколог (очистные сооружения)': 'Environmental Engineer (Water Treatment)',
+    'Специалист по автономным энергосистемам': 'Off-Grid Power Systems Specialist',
+    'Инженер по ядерной безопасности': 'Nuclear Safety Engineer',
+    'Программист embedded-систем реального времени': 'Real-Time Embedded Systems Programmer',
+    'Специалист по кибербезопасности критической инфраструктуры': 'Critical Infrastructure Cybersecurity Specialist',
+    'Инженер по спутниковой связи': 'Satellite Communications Engineer',
+    'Специалист по искусственному интеллекту': 'Artificial Intelligence Specialist',
+    'Криптограф': 'Cryptographer',
+    'Специалист по big data и логистике ресурсов': 'Big Data and Resource Logistics Specialist',
+    'Астрофизик': 'Astrophysicist',
+    'Микробиолог-почвовед': 'Soil Microbiologist',
+    'Ботаник-селекционер (устойчивые культуры)': 'Plant Breeder (Resilient Crops)',
+    'Химик-технолог (переработка отходов)': 'Chemical Engineer (Waste Processing)',
+    'Сейсмолог-вулканолог': 'Seismologist-Volcanologist',
+    'Метеоролог-климатолог': 'Meteorologist-Climatologist',
+    'Снайпер спецназа': 'Special Forces Sniper',
+    'Сапёр-подрывник': 'Combat Engineer (Demolitions)',
+    'Командир штурмовой группы': 'Assault Team Commander',
+    'Военный медик-хирург': 'Combat Medic-Surgeon',
+    'Специалист РХБЗ (радиационная, химическая, биологическая защита)': 'CBRN Specialist (Radiation, Chemical, Biological Defense)',
+    'Инструктор по выживанию': 'Survival Instructor',
+    'Кинолог служебных собак': 'Military Working Dog Handler',
+    'Пилот военно-транспортной авиации': 'Military Transport Pilot',
+    'Оператор беспилотных летательных аппаратов': 'Drone Operator',
+    'Агроном-гидропоник': 'Hydroponics Agronomist',
+    'Зоотехник (разведение скота в неволе)': 'Livestock Zootechnician (Captive Breeding)',
+    'Пчеловод-селекционер': 'Beekeeper-Breeder',
+    'Технолог пищевого консервирования': 'Food Canning Technologist',
+    'Мельник-пекарь (автономное производство хлеба)': 'Miller-Baker (Self-Sufficient Bread Production)',
+    'Специалист по вертикальному земледелию': 'Vertical Farming Specialist',
+    'Рыбовод (аквакультура закрытого цикла)': 'Fish Farmer (Closed-Loop Aquaculture)',
+    'Сантехник-универсал (автономные системы)': 'Universal Plumber (Off-Grid Systems)',
+    'Сварщик высокого разряда': 'High-Grade Welder',
+    'Плотник-краснодеревщик': 'Cabinetmaker',
+    'Слесарь-инструментальщик': 'Tool-and-Die Mechanic',
+    'Мастер по ремонту генераторов': 'Generator Repair Technician',
+    'Кузнец-металлург': 'Blacksmith-Metallurgist',
+    'Психолог кризисных ситуаций': 'Crisis Psychologist',
+    'Историк-архивариус': 'Historian-Archivist',
+    'Лингвист-полиглот (10+ языков)': 'Polyglot Linguist (10+ Languages)',
+    'Юрист по международному праву': 'International Law Attorney',
+    'Социолог малых групп': 'Small Group Sociologist',
+    'Переговорщик по освобождению заложников': 'Hostage Negotiator',
+    'Педагог-дефектолог': 'Special Education Teacher',
+    'Библиотекарь-каталогизатор редких изданий': 'Rare Books Librarian-Cataloguer',
+    'Антрополог': 'Anthropologist',
+    'Инженер-акустик (звукоизоляция)': 'Acoustic Engineer (Soundproofing)',
+    'Художник-реставратор': 'Art Restorer',
+    'Актёр-психодраматерапевт': 'Psychodrama Therapist-Actor',
+    'Музыкант-терапевт (музтерапия)': 'Music Therapist',
+    'Сценарист и режиссёр (поддержание морального духа)': 'Screenwriter and Director (Morale Maintenance)',
+    'Часовщик-механик (точная механика)': 'Watchmaker (Precision Mechanics)',
+    'Спелеолог-исследователь пещер': 'Cave Explorer-Speleologist',
+    'Океанолог-биолог': 'Marine Biologist-Oceanographer',
+    'Пилот подводных аппаратов': 'Submersible Pilot',
+    'Специалист по опреснению и водоснабжению': 'Water Desalination and Supply Specialist',
+    'Криминалист-эксперт': 'Forensic Expert',
+    'Таксидермист': 'Taxidermist',
+    'Дегустатор и технолог по консервации продуктов': 'Food Preservation Taster and Technologist',
+    'Специалист по добыче и переработке урана': 'Uranium Mining and Processing Specialist',
+    'Инженер лифтового и подъёмного оборудования': 'Elevator and Lifting Equipment Engineer',
+    'Метролог (специалист по измерительным приборам)': 'Metrologist (Measuring Instruments Specialist)',
+    'Пилот-испытатель': 'Test Pilot',
+    'Специалист по подземным коммуникациям метрополитена': 'Subway Underground Utilities Specialist',
+    'Технолог по производству топлива из биомассы': 'Biomass Fuel Production Technologist',
+    'Мужчина, 19 лет': 'Male, 19 years old',
+    'Женщина, 21 год': 'Female, 21 years old',
+    'Мужчина, 24 года': 'Male, 24 years old',
+    'Женщина, 27 лет': 'Female, 27 years old',
+    'Мужчина, 29 лет': 'Male, 29 years old',
+    'Женщина, 32 года': 'Female, 32 years old',
+    'Мужчина, 35 лет': 'Male, 35 years old',
+    'Женщина, 38 лет': 'Female, 38 years old',
+    'Мужчина, 41 год': 'Male, 41 years old',
+    'Женщина, 44 года': 'Female, 44 years old',
+    'Мужчина, 47 лет': 'Male, 47 years old',
+    'Женщина, 50 лет': 'Female, 50 years old',
+    'Мужчина, 53 года': 'Male, 53 years old',
+    'Женщина, 56 лет': 'Female, 56 years old',
+    'Мужчина, 60 лет': 'Male, 60 years old',
+    'Женщина, 63 года': 'Female, 63 years old',
+    'Мужчина, 17 лет': 'Male, 17 years old',
+    'Женщина, 17 лет': 'Female, 17 years old',
+    'Мужчина, 68 лет': 'Male, 68 years old',
+    'Женщина, 71 год': 'Female, 71 years old',
+    'Небинарная персона, 26 лет': 'Non-binary person, 26 years old',
+    'Мужчина, 15 лет': 'Male, 15 years old',
+    'Женщина, 15 лет': 'Female, 15 years old',
+    'Мужчина, 75 лет': 'Male, 75 years old',
+    'Абсолютно здоров(а)': 'Perfectly healthy',
+    'Лёгкая близорукость (-1.5)': 'Mild nearsightedness (-1.5)',
+    'Хронический бронхит': 'Chronic bronchitis',
+    'Аллергия на пыльцу и пыль': 'Pollen and dust allergy',
+    'Сахарный диабет 2 типа (компенсированный)': 'Type 2 diabetes (well-controlled)',
+    'Астма лёгкой степени': 'Mild asthma',
+    'Хроническая мигрень': 'Chronic migraines',
+    'Сколиоз 1 степени': 'Grade 1 scoliosis',
+    'Гипертония 1 стадии': 'Stage 1 hypertension',
+    'Полное отсутствие обоняния (аносмия)': 'Complete loss of smell (anosmia)',
+    'Один протезированный тазобедренный сустав': 'One hip replacement',
+    'Эпилепсия (медикаментозно контролируемая)': 'Epilepsy (medically controlled)',
+    'Врождённый порок сердца (компенсированный)': 'Congenital heart defect (compensated)',
+    'Хроническая бессонница': 'Chronic insomnia',
+    'Псориаз': 'Psoriasis',
+    'Пищевая аллергия (орехи)': 'Nut allergy',
+    'Артрит суставов рук': 'Arthritis in the hands',
+    'Потеря слуха на одно ухо': 'Hearing loss in one ear',
+    'ВИЧ+ (на терапии, недетектируемая нагрузка)': 'HIV-positive (on therapy, undetectable viral load)',
+    'Бесплодие': 'Infertility',
+    'Онкология в стадии ремиссии (2 года)': 'Cancer in remission (2 years)',
+    'Протез нижней конечности выше колена': 'Above-knee leg prosthesis',
+    'Целиакия (непереносимость глютена)': 'Celiac disease (gluten intolerance)',
+    'Здоров(а), но неделю назад был контакт с больным гриппом': 'Healthy, but had contact with a flu patient a week ago',
+    'Хроническая анемия': 'Chronic anemia',
+    'Панические атаки (без диагноза)': 'Panic attacks (undiagnosed)',
+    'Полностью здоров(а), отличная физическая форма': 'Perfectly healthy, excellent physical condition',
+    'Варикозное расширение вен': 'Varicose veins',
+    'Заикание при стрессе': 'Stress-induced stutter',
+    'Ремиссия после инсульта, лёгкий парез руки': 'Post-stroke remission, mild arm paresis',
+    'Клаустрофобия (боязнь замкнутых пространств)': 'Claustrophobia (fear of enclosed spaces)',
+    'Никтофобия (боязнь темноты)': 'Nyctophobia (fear of the dark)',
+    'Мизофобия (боязнь грязи и микробов)': 'Mysophobia (fear of dirt and germs)',
+    'Танатофобия (боязнь смерти)': 'Thanatophobia (fear of death)',
+    'Социофобия (боязнь общества)': 'Social phobia (fear of society)',
+    'Айхмофобия (боязнь острых предметов)': 'Aichmophobia (fear of sharp objects)',
+    'Акрофобия (боязнь высоты)': 'Acrophobia (fear of heights)',
+    'Гидрофобия (боязнь воды)': 'Hydrophobia (fear of water)',
+    'Аутофобия (боязнь одиночества)': 'Autophobia (fear of being alone)',
+    'Агорафобия (боязнь открытых пространств)': 'Agoraphobia (fear of open spaces)',
+    'Гемофобия (боязнь крови)': 'Hemophobia (fear of blood)',
+    'Кинофобия (боязнь собак)': 'Cynophobia (fear of dogs)',
+    'Пирофобия (боязнь огня)': 'Pyrophobia (fear of fire)',
+    'Энтомофобия (боязнь насекомых)': 'Entomophobia (fear of insects)',
+    'Нет фобий': 'No phobias',
+    'Трипофобия (боязнь скоплений отверстий)': 'Trypophobia (fear of clusters of holes)',
+    'Мегаломанофобия (боязнь больших предметов/толпы)': 'Megalophobia (fear of large objects/crowds)',
+    'Фонофобия (боязнь громких звуков)': 'Phonophobia (fear of loud noises)',
+    'Ситофобия (боязнь отравленной пищи)': 'Sitophobia (fear of poisoned food)',
+    'Технофобия (боязнь техники и механизмов)': 'Technophobia (fear of technology and machinery)',
+    'Ксенофобия (страх перед незнакомцами)': 'Xenophobia (fear of strangers)',
+    'Некрофобия (боязнь мёртвых тел)': 'Necrophobia (fear of dead bodies)',
+    'Клаустрофобия отсутствует, но есть боязнь крыс': 'No claustrophobia, but afraid of rats',
+    'Панфобия (смутный постоянный страх без причины)': 'Panphobia (vague constant fear without cause)',
+    'Шахматы на профессиональном уровне': 'Professional-level chess',
+    'Игра на гитаре и вокал': 'Guitar and singing',
+    'Резьба по дереву': 'Wood carving',
+    'Скалолазание': 'Rock climbing',
+    'Стрельба из лука': 'Archery',
+    'Каллиграфия': 'Calligraphy',
+    'Разведение аквариумных рыбок': 'Aquarium fishkeeping',
+    'Кулинария и выпечка хлеба': 'Cooking and bread baking',
+    'Йога и медитация': 'Yoga and meditation',
+    'Программирование игр в свободное время': 'Game programming as a hobby',
+    'Фотография': 'Photography',
+    'Единоборства (карате, чёрный пояс)': 'Martial arts (karate, black belt)',
+    'Вязание и шитьё': 'Knitting and sewing',
+    'Астрономия и наблюдение за звёздами': 'Astronomy and stargazing',
+    'Разгадывание головоломок и квестов': 'Solving puzzles and quests',
+    'Коллекционирование монет и марок': 'Coin and stamp collecting',
+    'Танцы (бальные)': 'Dancing (ballroom)',
+    'Рыбалка': 'Fishing',
+    'Ремонт часов и механизмов': 'Clock and mechanism repair',
+    'Стендап и импровизация': 'Stand-up and improv',
+    'Садоводство': 'Gardening',
+    'Игра на баяне/аккордеоне': 'Playing the accordion/bayan',
+    'Вокал (оперный)': 'Singing (opera)',
+    'Настольные ролевые игры': 'Tabletop role-playing games',
+    'Скорочтение и мнемотехники': 'Speed reading and mnemonics',
+    'Гончарное дело': 'Pottery',
+    'Пение в хоре': 'Choir singing',
+    'Пилотирование дронов': 'Drone piloting',
+    'Оригами': 'Origami',
+    'Плавание на длинные дистанции': 'Long-distance swimming',
+    'Выживание в дикой природе (бушкрафт)': 'Wilderness survival (bushcraft)',
+    'Игра в покер': 'Playing poker',
+    'Шитьё и крой одежды': 'Sewing and dressmaking',
+    'Лидерские качества': 'Leadership qualities',
+    'Прирождённый дипломат': 'Natural diplomat',
+    'Абсолютная честность': 'Absolute honesty',
+    'Хладнокровие в критических ситуациях': 'Cool-headed in critical situations',
+    'Отличная память': 'Excellent memory',
+    'Эмпатия и умение слушать': 'Empathy and good listening skills',
+    'Физическая выносливость': 'Physical endurance',
+    'Быстрая обучаемость': 'Fast learner',
+    'Оптимизм и харизма': 'Optimism and charisma',
+    'Хозяйственность и бережливость': 'Resourcefulness and thriftiness',
+    'Аналитический склад ума': 'Analytical mindset',
+    'Чувство юмора, поднимает боевой дух': 'Sense of humor, boosts morale',
+    'Дисциплинированность': 'Discipline',
+    'Умение находить компромиссы': 'Skilled at finding compromises',
+    'Смелость и решительность': 'Courage and decisiveness',
+    'Творческое мышление': 'Creative thinking',
+    'Скрупулёзность и внимание к деталям': 'Meticulousness and attention to detail',
+    'Настойчивость': 'Persistence',
+    'Склонность к паническим атакам в стрессе': 'Prone to panic attacks under stress',
+    'Излишняя авторитарность': 'Excessively authoritarian',
+    'Патологическая лживость': 'Pathological liar',
+    'Вспыльчивость и агрессивность': 'Quick-tempered and aggressive',
+    'Клептомания': 'Kleptomania',
+    'Игромания (лудомания)': 'Gambling addiction',
+    'Алкогольная зависимость (в завязке)': 'Recovering alcoholic',
+    'Эгоизм и себялюбие': 'Selfish and self-centered',
+    'Склонность к депрессии': 'Prone to depression',
+    'Мизантропия': 'Misanthropy',
+    'Чрезмерная доверчивость, легко манипулировать': 'Overly trusting, easy to manipulate',
+    'Хроническая прокрастинация': 'Chronic procrastination',
+    'Мания величия': 'Delusions of grandeur',
+    'Скрытность и подозрительность': 'Secretive and suspicious',
+    'Расизм/ксенофобские взгляды': 'Racist/xenophobic views',
+    'Склонность к предательству ради выгоды': 'Prone to betrayal for personal gain',
+    'Трусость в критических ситуациях': 'Cowardice in critical situations',
+    'Педантичность до одержимости': 'Obsessive perfectionism',
+    'Рюкзак с медикаментами первой необходимости': 'Backpack with essential medications',
+    'Ноутбук с картами бомбоубежищ и метро': 'Laptop with bomb shelter and subway maps',
+    'Набор слесарных инструментов': 'Set of locksmith tools',
+    'Охотничье ружьё и 20 патронов': 'Hunting rifle and 20 rounds',
+    'Аптечка военного образца': 'Military-grade first aid kit',
+    'Портативная рация': 'Portable radio',
+    'Мешок с семенами овощных культур': 'Bag of vegetable seeds',
+    'Набор для очистки воды': 'Water purification kit',
+    'Генератор на ручной тяге': 'Hand-crank generator',
+    'Собака-компаньон (овчарка)': 'Companion dog (German shepherd)',
+    'Ящик с консервами (на 2 недели)': 'Crate of canned food (2 weeks\' worth)',
+    'Швейцарский нож и набор инструментов выживания': 'Swiss army knife and survival tool kit',
+    'Книги по медицине и справочники': 'Medical books and reference guides',
+    'Канистра бензина 20 литров': '20-liter gasoline canister',
+    'Дозиметр и защитный костюм': 'Dosimeter and protective suit',
+    'Ящик с инструментами электрика': 'Box of electrician\'s tools',
+    'Спальный мешок и палатка': 'Sleeping bag and tent',
+    'Набор химических реактивов': 'Set of chemical reagents',
+    'Ноутбук с базой данных выживших': 'Laptop with a survivor database',
+    'Музыкальный инструмент (гитара)': 'Musical instrument (guitar)',
+    'Личный дневник с важными записями': 'Personal diary with important notes',
+    'Фотоаппарат и архив снимков': 'Camera and photo archive',
+    'Кот-компаньон': 'Companion cat',
+    'Набор игральных карт и настольных игр': 'Deck of cards and board games',
+    'Мотоцикл с полным баком': 'Motorcycle with a full tank',
+    'Владеет 4 иностранными языками': 'Fluent in 4 foreign languages',
+    'Ранее был(а) осуждён(а) за экономическое преступление': 'Previously convicted of an economic crime',
+    'Прошёл(ла) действительную военную службу в горячей точке': 'Served active military duty in a conflict zone',
+    'Имеет судимость за хранение оружия': 'Has a firearms possession conviction',
+    'Является донором универсальной группы крови (I отрицательная)': 'Universal blood type donor (O negative)',
+    'Скрытый талант к обучению других': 'Hidden talent for teaching others',
+    'В прошлом был(а) волонтёром МЧС': 'Former emergency services volunteer',
+    'Страдает бессонницей уже 3 года': 'Has suffered from insomnia for 3 years',
+    'Является носителем редкого генетического иммунитета к части вирусов': 'Carries a rare genetic immunity to some viruses',
+    'Ранее работал(а) в разведке': 'Formerly worked in intelligence',
+    'Воспитывает троих детей в одиночку': 'Raising three children alone',
+    'Женат/замужем, супруг(а) остался(лась) снаружи': 'Married, spouse stayed outside',
+    'Является убеждённым вегетарианцем': 'A committed vegetarian',
+    'Тайно ведёт дневник наблюдений за остальными': 'Secretly keeps a journal observing the others',
+    'Имеет опыт выживания в условиях автономного плавания 6 месяцев': 'Has experience surviving 6 months of autonomous sailing',
+    'Ранее участвовал(а) в экспедиции на Северный полюс': 'Previously took part in a North Pole expedition',
+    'Страдает патологической ревностью': 'Suffers from pathological jealousy',
+    'Является публичной персоной / знаменитостью': 'A public figure / celebrity',
+    'Имеет крупный долг перед криминальными структурами': 'Has a large debt to criminal organizations',
+    'Скрывает беременность (на раннем сроке)': 'Hiding a pregnancy (early stage)',
+    'Религиозный лидер небольшой общины': 'Religious leader of a small community',
+    'В детстве пережил(а) техногенную катастрофу': 'Survived a technological disaster as a child',
+    'Обладает фотографической памятью': 'Has a photographic memory',
+    'Ранее судим(а) за хакерство государственных систем': 'Previously convicted of hacking government systems',
+    '180 м² на человека — тесное, но функциональное убежище': '180 m² per person — cramped but functional shelter',
+    '45 м² на человека — просторный подземный комплекс': '45 m² per person — spacious underground complex',
+    '90 м² на человека — стандартное военное бомбоубежище': '90 m² per person — standard military bomb shelter',
+    '30 м² на человека — минимальные условия выживания': '30 m² per person — minimal survival conditions',
+    '120 м² на человека — бывший научный подземный центр': '120 m² per person — former underground research facility',
+    '1 год до предположительного восстановления поверхности': '1 year until the surface is expected to recover',
+    '3 года до снижения уровня радиации/токсинов': '3 years until radiation/toxin levels decrease',
+    '5 лет до окончания «ядерной зимы»': '5 years until the end of the "nuclear winter"',
+    '10 лет — минимальный срок для восстановления экосистемы': '10 years — the minimum time for the ecosystem to recover',
+    '20 лет — до возможного появления новой цивилизации': '20 years — until a new civilization might emerge',
+    '6 месяцев — краткосрочное убежище от пиковой опасности': '6 months — short-term shelter from peak danger',
+    '1 этаж': '1 floor',
+    '2 этажа': '2 floors',
+    '3 этажа': '3 floors',
+    '4 этажа': '4 floors',
+    '5 этажей': '5 floors',
+    'Оружейная комната с арсеналом': 'Armory with a weapons cache',
+    'Медицинский блок с операционной': 'Medical bay with an operating room',
+    'Гидропонная теплица для выращивания овощей': 'Hydroponic greenhouse for growing vegetables',
+    'Библиотека и архив знаний': 'Library and knowledge archive',
+    'Мастерская для ремонта техники': 'Workshop for equipment repair',
+    'Спортивный зал': 'Gym',
+    'Комната отдыха и психологической разгрузки': 'Recreation and relaxation room',
+    'Автономная электростанция': 'Autonomous power plant',
+    'Лаборатория для исследований': 'Research laboratory',
+    'Хранилище семян и генофонда': 'Seed and gene bank vault',
+    'Радиоузел для связи с внешним миром': 'Radio room for communication with the outside world',
+    'Дополнительный резервуар с питьевой водой': 'Additional drinking water reservoir',
+    'Запасов провизии хватит впритык на заявленное число людей': 'Provisions will last just enough for the stated number of people',
+    'Запасов провизии хватит на число людей на 20% меньше расчётного — придётся урезать пайки': 'Provisions will only last for 20% fewer people than planned — rations will need to be cut',
+    'Есть небольшой излишек провизии (+15%) благодаря консервации': 'There\'s a small surplus of provisions (+15%) thanks to preserving',
+    'Запасы воды ограничены, потребуется строгая экономия': 'Water supplies are limited, strict rationing will be required',
+    'Обнаружен дополнительный склад консервов на соседнем уровне (+30%)': 'An additional stash of canned goods was found on the adjacent level (+30%)',
+    'В системе вентиляции обнаружена утечка — на ремонт уйдут ценные ресурсы.': 'A leak has been found in the ventilation system — repairs will cost valuable resources.',
+    'Один из отсеков бункера затоплен грунтовыми водами. Придётся тесниться.': 'One of the bunker compartments is flooded with groundwater. Everyone will have to squeeze in.',
+    'Найден дополнительный тайник с консервами на 2 недели.': 'An additional cache of canned food for 2 weeks has been found.',
+    'Внезапный скачок напряжения вывел из строя часть освещения.': 'A sudden power surge knocked out part of the lighting.',
+    'Кто-то услышал стук снаружи — возможно, там ещё выжившие.': 'Someone heard knocking outside — there may be other survivors.',
+    'Обнаружена плесень в системе вентиляции — риск заболеваний.': 'Mold has been found in the ventilation system — risk of illness.',
+    'Радиосвязь поймала обрывок сигнала от другого убежища.': 'The radio picked up a fragment of a signal from another shelter.',
+    'Сломался фильтр очистки воды, ремонт займёт время.': 'The water filter has broken, repairs will take time.',
+    'Психологическое напряжение нарастает — назревает конфликт между жильцами.': 'Psychological tension is rising — conflict is brewing among the residents.',
+    'Обнаружен запасной генератор, но топлива для него мало.': 'A spare generator has been found, but there is little fuel for it.',
+    'Один из аварийных выходов завален обломками.': 'One of the emergency exits is blocked by debris.',
+    'В хранилище завёлся грызуны — часть еды испорчена.': 'Rodents have infested the storage — some of the food is spoiled.',
+    'Пришло время распределить оставшиеся медикаменты.': 'It\'s time to distribute the remaining medications.',
+    'Датчики зафиксировали повышение радиационного фона снаружи.': 'Sensors have detected a rise in the radiation level outside.',
+    'Найдена карта окрестностей — возможно, есть путь к спасению.': 'A map of the surrounding area has been found — there may be a path to safety.',
+    'Один из жителей бункера тяжело заболел — необходима помощь врача.': 'One of the bunker\'s residents has fallen seriously ill — a doctor\'s help is needed.',
+    'Ядерная война': 'Nuclear War',
+    'Массированный обмен ядерными ударами между крупнейшими державами стёр с лица земли большинство мегаполисов. Радиационный фон на поверхности смертельно опасен, воздух насыщен радиоактивной пылью. Ядерная зима может продлиться десятилетия.': 'A massive exchange of nuclear strikes between the world\'s major powers has wiped most megacities off the map. Radiation levels on the surface are lethal, the air is thick with radioactive dust. The nuclear winter could last decades.',
+    'Пандемия «Штамм Омега»': 'Pandemic "Strain Omega"',
+    'Мутировавший вирус с летальностью 92% и воздушно-капельным путём передачи выкосил большую часть населения планеты за 3 месяца. Заражённые впадают в агрессивное бредовое состояние на последней стадии болезни.': 'A mutated airborne virus with a 92% mortality rate wiped out most of the planet\'s population in 3 months. In the final stage of the disease, the infected fall into an aggressive, delirious state.',
+    'Падение астероида': 'Asteroid Impact',
+    'Астероид диаметром 4 км врезался в Атлантический океан. Мегацунами высотой до 200 метров смыло прибрежные города, а поднятая пыль закрыла солнце на неопределённый срок, вызвав резкое похолодание.': 'A 4-km-diameter asteroid struck the Atlantic Ocean. A mega-tsunami up to 200 meters high swept away coastal cities, and the dust thrown into the atmosphere has blocked out the sun indefinitely, causing sharp cooling.',
+    'Восстание искусственного интеллекта': 'Artificial Intelligence Uprising',
+    'Военный ИИ «Аргус», получивший контроль над автономным вооружением, счёл человечество угрозой и начал скоординированную атаку боевых дронов и роботов на населённые пункты.': 'The military AI "Argus", having gained control over autonomous weapons systems, deemed humanity a threat and launched a coordinated attack of combat drones and robots on populated areas.',
+    'Зомби-апокалипсис': 'Zombie Apocalypse',
+    'Секретный биологический препарат вырвался на свободу из военной лаборатории. Заражённые теряют разум, становятся крайне агрессивными и передают инфекцию через укус. Города превратились в зоны кишащие зомби.': 'A secret biological agent escaped from a military laboratory. The infected lose their minds, become extremely aggressive, and transmit the infection through bites. Cities have turned into zones swarming with zombies.',
+    'Глобальное затопление': 'Global Flooding',
+    'Резкое таяние ледников Антарктиды и Гренландии подняло уровень мирового океана на 60 метров за несколько недель. Континенты превратились в архипелаги, большинство прибрежных цивилизаций поглощены водой.': 'Rapid melting of the Antarctic and Greenland ice sheets raised global sea levels by 60 meters within a few weeks. Continents turned into archipelagos, most coastal civilizations were swallowed by water.',
+    'Супервулкан Йеллоустоун': 'Yellowstone Supervolcano',
+    'Извержение супервулкана выбросило в атмосферу триллионы тонн пепла. Вулканическая зима накрыла планету, солнечный свет почти не проникает сквозь пепельные облака, температура упала на 15°C.': 'The eruption of a supervolcano threw trillions of tons of ash into the atmosphere. A volcanic winter blanketed the planet, sunlight barely penetrates the ash clouds, temperatures dropped by 15°C.',
+    'Химическая катастрофа': 'Chemical Disaster',
+    'Авария на крупном химическом комбинате выбросила в атмосферу облако нервно-паралитического газа, распространившееся на тысячи километров благодаря аномальным воздушным потокам. Всё живое на поверхности в опасности.': 'An accident at a major chemical plant released a cloud of nerve gas into the atmosphere, which spread thousands of kilometers due to anomalous air currents. All life on the surface is in danger.',
+    'Вторжение инопланетной формы жизни': 'Alien Life Form Invasion',
+    'Неопознанные биологические организмы, прибывшие на землю неизвестным образом, начали агрессивно распространяться, поглощая ресурсы и уничтожая экосистему. Их природа и уязвимости почти не изучены.': 'Unidentified biological organisms, arriving on Earth by unknown means, began spreading aggressively, consuming resources and destroying the ecosystem. Their nature and weaknesses are barely understood.',
+    'Магнитная буря и коллапс электросети': 'Magnetic Storm and Power Grid Collapse',
+    'Аномально мощная вспышка на Солнце вызвала глобальный коллапс электросетей и спутниковой связи. Отказ систем жизнеобеспечения в мегаполисах привёл к хаосу, мародёрству и гражданской войне.': 'An abnormally powerful solar flare caused a global collapse of power grids and satellite communications. The failure of life-support systems in megacities led to chaos, looting and civil war.',
+    'Экологический коллапс': 'Ecological Collapse',
+    'Многолетнее загрязнение атмосферы достигло критической точки: кислород в воздухе упал до 14%, а концентрация токсичных веществ сделала поверхность земли непригодной для дыхания без фильтрации.': 'Decades of atmospheric pollution reached a critical point: oxygen levels in the air dropped to 14%, and the concentration of toxic substances made the Earth\'s surface unbreathable without filtration.',
+    'Мировая ядерная зима после локального конфликта': 'Global Nuclear Winter After a Local Conflict',
+    'Ограниченный региональный ядерный конфликт между двумя странами вызвал непропорционально мощный климатический эффект — глобальное похолодание и неурожаи по всей планете, спровоцировавшие голод и войны за ресурсы.': 'A limited regional nuclear conflict between two countries caused a disproportionately powerful climate effect — global cooling and crop failures across the planet, triggering famine and wars over resources.',
+    'Генетически модифицированная чума растений': 'Genetically Modified Plant Plague',
+    'Из-за утечки на агробиологическом предприятии мутировавший грибок уничтожил более 90% сельскохозяйственных культур планеты, вызвав мировой голод и коллапс продовольственных цепочек.': 'Due to a leak at an agrobiological facility, a mutated fungus destroyed over 90% of the planet\'s agricultural crops, causing a global famine and the collapse of food supply chains.',
+    'Тектонический разлом': 'Tectonic Rift',
+    'Серия аномальных землетрясений магнитудой выше 9.5 расколола несколько континентальных плит. Массовые разрушения, цунами и извержения сопутствующих вулканов сделали поверхность крайне опасной.': 'A series of anomalous earthquakes with a magnitude above 9.5 split several continental plates. Massive destruction, tsunamis, and accompanying volcanic eruptions have made the surface extremely dangerous.',
+    'Гамма-всплеск от близкой сверхновой': 'Gamma-Ray Burst from a Nearby Supernova',
+    'Взрыв сверхновой звезды в относительной близости к Солнечной системе обрушил на Землю поток гамма-излучения, разрушивший озоновый слой. Поверхность планеты теперь подвержена смертельному уровню УФ-радиации.': 'The explosion of a supernova relatively close to the Solar System unleashed a stream of gamma radiation onto Earth, destroying the ozone layer. The planet\'s surface is now exposed to lethal levels of UV radiation.',
+    'Нашествие мутировавших насекомых': 'Invasion of Mutated Insects',
+    'В результате бесконтрольного применения агрохимикатов возникла популяция гигантских агрессивных насекомых, стремительно размножающихся и представляющих смертельную опасность для человека.': 'As a result of uncontrolled use of agrochemicals, a population of giant aggressive insects emerged, rapidly multiplying and posing a deadly danger to humans.',
+    'Лишний рот': 'An Extra Mouth to Feed',
+    'Один из выживших признаётся, что тайно провёл в бункер своего родственника — он не проходил отбор и не входит в расчётное число мест. Еды и кислорода на всех может не хватить. Бункер должен решить: разрешить остаться незваному гостю, изгнать его обратно на поверхность или исключить из числа выживших того, кто его привёл.': 'One of the survivors admits to secretly bringing a relative into the bunker — someone who was never vetted and isn\'t counted among the allotted spots. There may not be enough food and oxygen for everyone. The bunker must decide: let the uninvited guest stay, cast them out to the surface, or exclude the survivor who brought them in.',
+    'Сигнал извне': 'A Signal From Outside',
+    'Радист поймал слабый сигнал — группа выживших неподалёку просит впустить их в обмен на запасы топлива и медикаментов. Открыть шлюз — риск заражения или нападения. Отказать — потерять ценные ресурсы и, возможно, обречь людей на гибель.': 'The radio operator picked up a weak signal — a group of survivors nearby is asking to be let in, in exchange for fuel and medical supplies. Opening the airlock risks infection or attack. Refusing means losing valuable resources and possibly condemning those people to death.',
+    'Отказ системы фильтрации': 'Filtration System Failure',
+    'Главный фильтр воздуха вышел из строя. Резервной системы хватит лишь на ограниченное количество человек в течение суток, пока идёт ремонт. Придётся временно эвакуировать часть жильцов в менее защищённый отсек с худшей вентиляцией.': 'The main air filter has broken down. The backup system will only support a limited number of people for a day while repairs are underway. Some residents will have to be temporarily evacuated to a less protected, poorly ventilated compartment.',
+    'Раскол мнений': 'A Split in Opinion',
+    'Часть выживших предлагает ввести жёсткий комендантский час и нормирование пищи под контролем «совета старейшин». Другая часть считает это узурпацией власти и требует равного голоса для всех. Напряжение в бункере растёт.': 'Some survivors propose a strict curfew and food rationing controlled by a "council of elders". Others see this as a power grab and demand an equal voice for everyone. Tension in the bunker is rising.',
+    'Заброшенный склад': 'Abandoned Storage',
+    'Разведгруппа обнаружила соседний заброшенный бункер с остатками припасов, но часть помещений обрушена, а внутри слышны подозрительные звуки. Исследовать находку — шанс пополнить запасы, но и риск для отправленных туда людей.': 'A scouting party discovered a neighboring abandoned bunker with leftover supplies, but part of it has collapsed and suspicious sounds can be heard inside. Exploring the find is a chance to restock supplies, but also a risk for those sent there.',
+    'Подозрение на заражение': 'Suspected Infection',
+    'У одного из жильцов внезапно поднялась температура и появился кашель. Врач не может точно сказать, обычная ли это простуда или начало болезни, свирепствующей на поверхности. Изолировать его — разумная мера, но это может быть излишней жестокостью к невиновному.': 'One of the residents suddenly developed a fever and a cough. The doctor can\'t say for sure whether it\'s an ordinary cold or the onset of the disease raging on the surface. Isolating them is a reasonable precaution, but it could be needless cruelty to an innocent person.',
+    'Пополнение в семье': 'A New Addition to the Family',
+    'Стало известно, что одна из женщин в бункере беременна. Это радостная новость, но лишний человек через несколько месяцев означает дополнительную нагрузку на и без того ограниченные запасы еды, воды и медицины.': 'It has become known that one of the women in the bunker is pregnant. This is joyful news, but an extra person in a few months means additional strain on the already limited supplies of food, water, and medicine.',
+    'Утечка топлива': 'Fuel Leak',
+    'Обнаружена трещина в топливном баке генератора. Часть драгоценного топлива уже потеряна, а без ремонта электричество может отключиться в самый неподходящий момент. На ремонт нужны детали, которых в бункере может не быть.': 'A crack has been found in the generator\'s fuel tank. Some of the precious fuel has already been lost, and without repairs the electricity could go out at the worst possible moment. Repairs require parts that the bunker may not have.',
+    'Военный патруль': 'Military Patrol',
+    'На поверхности замечен вооружённый патруль в форме неизвестной принадлежности. Они пока не заметили вентиляционные выходы бункера. Стоит ли попытаться выйти на контакт в надежде на организованную помощь, или лучше затаиться и не рисковать?': 'An armed patrol of unknown affiliation has been spotted on the surface. They haven\'t noticed the bunker\'s ventilation outlets yet. Should the bunker attempt to make contact in hopes of organized help, or is it better to stay hidden and not risk it?',
+    'Кража из общих запасов': 'Theft From the Common Stores',
+    'Кто-то тайно ворует еду из общего хранилища по ночам. Улики указывают на нескольких подозреваемых. Если виновного не найти, атмосфера доверия в бункере будет разрушена, а голодающие могут начать самосуд.': 'Someone has been secretly stealing food from the communal storage at night. The evidence points to several suspects. If the culprit isn\'t found, the atmosphere of trust in the bunker will be destroyed, and the hungry may resort to mob justice.',
+    'Странный дневник': 'A Strange Diary',
+    'В одном из подсобных помещений найден дневник предыдущих обитателей бункера. Последние записи обрываются на полуслове и описывают нарастающую панику и странные звуки из вентиляции. Стоит ли рассказать об этом всем, или лучше сохранить в тайне, чтобы не сеять панику?': 'A diary belonging to the bunker\'s previous inhabitants was found in one of the utility rooms. The last entries break off mid-sentence and describe rising panic and strange sounds from the ventilation. Should everyone be told about this, or is it better kept secret to avoid spreading panic?',
+    'Нашествие вредителей': 'Pest Infestation',
+    'В хранилище продовольствия обнаружена колония крупных насекомых, устойчивых к обычным методам травли. Они быстро размножаются и портят запасы. Радикальные меры борьбы могут повредить и без того скудные припасы.': 'A colony of large insects resistant to conventional pest control methods has been found in the food storage. They are rapidly multiplying and spoiling the supplies. Drastic countermeasures could damage the already scarce provisions.',
+    'Тяжелораненый снаружи': 'A Severely Wounded Person Outside',
+    'У главного шлюза обнаружен тяжелораненый человек, зовущий на помощь. Открыть дверь даже на несколько секунд — риск впустить заражённый воздух или радиацию. Оставить его снаружи означает верную смерть для него.': 'A severely wounded person calling for help has been found at the main airlock. Opening the door even for a few seconds risks letting in contaminated air or radiation. Leaving them outside means certain death for them.',
+    'Борьба за лидерство': 'A Struggle for Leadership',
+    'Два авторитетных члена группы одновременно претендуют на роль руководителя бункера, предлагая противоположные стратегии выживания. Остальным приходится выбирать сторону, что раскалывает коллектив на два лагеря.': 'Two respected members of the group are simultaneously claiming the role of bunker leader, each proposing opposing survival strategies. The rest are forced to pick a side, splitting the community into two camps.',
+    'Отключение электричества': 'Power Outage',
+    'Короткое замыкание обесточило половину бункера, включая часть систем жизнеобеспечения. Ремонтная бригада работает в темноте и тесноте, а резервных батарей хватит лишь на несколько часов.': 'A short circuit has cut power to half the bunker, including part of the life-support systems. The repair crew is working in darkness and cramped conditions, and the backup batteries will only last a few hours.',
+    'Карта безопасного маршрута': 'A Map of a Safe Route',
+    'Среди вещей одного из выживших находят старую карту с отметками предположительно безопасных зон на поверхности. Информация может быть устаревшей или ложной, но это единственная имеющаяся зацепка для будущей эвакуации.': 'Among one of the survivor\'s belongings, an old map is found marking presumably safe zones on the surface. The information may be outdated or false, but it\'s the only lead available for a future evacuation.',
+    'Трещина в стене бункера': 'A Crack in the Bunker Wall',
+    'При очередном подземном толчке в несущей стене бункера появилась трещина. Инженеры расходятся во мнениях: одни считают это косметическим повреждением, другие — предвестником обрушения целого отсека.': 'During another underground tremor, a crack appeared in one of the bunker\'s load-bearing walls. The engineers disagree: some consider it cosmetic damage, others a warning sign of an entire compartment\'s collapse.',
+    'Ограниченные лекарства': 'Limited Medication',
+    'В аптечке осталась только одна доза редкого антибиотика, а тяжело больны сразу двое: пожилой основатель общины и молодая мать с ребёнком. Кому отдать единственный шанс на выздоровление?': 'Only one dose of a rare antibiotic remains in the first aid kit, and two people are seriously ill at once: the elderly founder of the community and a young mother with a child. Who gets the only chance at recovery?',
+    'Обращение из столицы': 'A Broadcast From the Capital',
+    'Уцелевшая государственная радиостанция объявляет о формировании эвакуационного конвоя, который будет проходить в нескольких километрах от бункера через три дня. Путь до точки сбора труден и небезопасен, а информация не может быть проверена.': 'A surviving government radio station announces the formation of an evacuation convoy that will pass a few kilometers from the bunker in three days. The route to the meeting point is difficult and unsafe, and the information cannot be verified.',
+    'Утаённая информация': 'Withheld Information',
+    'Выясняется, что один из жильцов с самого начала скрывал важную информацию о своём прошлом или состоянии здоровья, которая могла повлиять на решение о его допуске в бункер. Как поступить с обманувшим доверие сообщества?': 'It turns out that one of the residents had been hiding important information about their past or health condition from the very start — information that could have affected the decision to let them into the bunker. What should be done with someone who betrayed the community\'s trust?',
+    'Всходы в теплице': 'Seedlings in the Greenhouse',
+    'Вопреки всем ожиданиям, часть посаженных семян неожиданно дала всходы в гидропонной теплице. Это шанс разнообразить рацион, но требует дополнительных ресурсов на уход и защиту от вредителей.': 'Against all expectations, some of the planted seeds have unexpectedly sprouted in the hydroponic greenhouse. This is a chance to diversify the diet, but it requires additional resources for care and pest protection.',
+    'Возгорание в отсеке': 'Fire in a Compartment',
+    'В техническом отсеке начался пожар из-за перегрузки проводки. Дым быстро распространяется по вентиляции. Тушение потребует использования части драгоценного запаса воды и может повредить оборудование.': 'A fire has broken out in the technical compartment due to wiring overload. Smoke is quickly spreading through the ventilation. Putting it out will require using some of the precious water supply and may damage equipment.',
+    'Возврат изгнанного': 'The Exile\'s Return',
+    'Ранее исключённый из бункера человек вернулся к шлюзу и умоляет впустить его обратно, утверждая, что снаружи невозможно выжить. Впустить его — значит нарушить принятое сообществом решение и уменьшить и без того скудные ресурсы.': 'A person previously excluded from the bunker has returned to the airlock, begging to be let back in, claiming it\'s impossible to survive outside. Letting them in would mean overturning the community\'s decision and further straining already scarce resources.',
+    'Прорыв канализации': 'Sewage System Rupture',
+    'Из-за смещения грунта прорвало канализационную систему бункера. Нечистоты грозят затопить нижний уровень и заразить питьевую воду, если проблему не устранить в кратчайшие сроки.': 'Due to ground shifting, the bunker\'s sewage system has ruptured. Waste threatens to flood the lower level and contaminate the drinking water if the problem isn\'t fixed quickly.',
+    'Моральная дилемма': 'Moral Dilemma',
+    'Внешний контакт': 'External Contact',
+    'Технический сбой': 'Technical Failure',
+    'Внутренний конфликт': 'Internal Conflict',
+    'Находка': 'Discovery',
+    'Угроза': 'Threat',
+    'Обсуждение': 'Discussion',
+  };
+
+  // Переводит игровой (сгенерированный) контент: если lang==en и есть перевод — вернёт его,
+  // иначе возвращает исходный текст (русский) как есть.
+  function tc(text) {
+    if (lang !== 'en' || text == null) return text;
+    const s = String(text);
+    if (CONTENT_EN[s] !== undefined) return CONTENT_EN[s];
+    // Дефолтное имя игрока, если он не ввёл своё (сервер генерирует "Игрок N")
+    const defaultNameMatch = s.match(/^Игрок (\d+)$/);
+    if (defaultNameMatch) return `Player ${defaultNameMatch[1]}`;
+    return s;
+  }
+
+  // ---------------------------------------------------------------------
+  // Перевод системных сообщений чата (приходят с сервера всегда на русском,
+  // так как формируются в src/rooms.ts). Распознаём известные шаблоны через
+  // регулярные выражения и пересобираем сообщение на английском, переводя
+  // вложенный игровой контент (названия катастроф/ситуаций/событий) через tc().
+  // Если сообщение не подходит ни под один шаблон — возвращается как есть.
+  // ---------------------------------------------------------------------
+
+  const SYSTEM_MSG_FIELD_LABELS_RU = {
+    'Возраст / пол': 'ageGender',
+    'Здоровье': 'health',
+    'Хобби': 'hobby',
+    'Фобия': 'phobia',
+    'Черта характера (+)': 'traitPositive',
+    'Черта характера (−)': 'traitNegative',
+    'Инвентарь': 'inventory',
+    'Доп. информация': 'extraInfo',
+  };
+
+  function translateSystemMessage(text) {
+    if (lang !== 'en' || !text) return text;
+    const s = String(text);
+    let m;
+
+    m = s.match(/^Комната\s+(\S+)\s+создана\. Мест: (\d+)\.$/);
+    if (m) return `Room ${m[1]} created. Seats: ${m[2]}.`;
+
+    m = s.match(/^(.+?) присоединился\(лась\) к бункеру \(место (\d+)\)\.$/);
+    if (m) return `${m[1]} joined the bunker (seat ${m[2]}).`;
+
+    m = s.match(/^☢ Катастрофа: «(.+)»\. Досье выживших сгенерированы\.$/);
+    if (m) return `☢ Catastrophe: "${tc(m[1])}". Survivor dossiers have been generated.`;
+
+    if (s === '🚪 Все спустились в бункер. Начинается раунд 1.') {
+      return '🚪 Everyone has entered the bunker. Round 1 begins.';
+    }
+
+    m = s.match(/^(.+?) раскрыл\(а\) характеристику «(.+)»\.$/);
+    if (m) {
+      const fieldKey = SYSTEM_MSG_FIELD_LABELS_RU[m[2]];
+      const label = fieldKey ? t('attr_' + fieldKey) : m[2];
+      return `${m[1]} revealed the "${label}" trait.`;
+    }
+
+    m = s.match(/^❌ (.+?) исключён\(а\) из бункера\.$/);
+    if (m) return `❌ ${m[1]} was excluded from the bunker.`;
+
+    m = s.match(/^✅ (.+?) возвращён\(а\) в бункер\.$/);
+    if (m) return `✅ ${m[1]} was returned to the bunker.`;
+
+    m = s.match(/^⏱ Раунд (\d+) начался\. Событие: (.+)$/);
+    if (m) return `⏱ Round ${m[1]} has begun. Event: ${tc(m[2])}`;
+
+    m = s.match(/^📢 Ситуация озвучена: «(.+)» — обсудите вслух!$/);
+    if (m) return `📢 Situation announced: "${tc(m[1])}" — discuss it out loud!`;
+
+    m = s.match(/^⏱ Запущен таймер «(.+)» на (\d+) сек\.$/);
+    if (m) return `⏱ Timer "${tc(m[1])}" started for ${m[2]} sec.`;
+
+    m = s.match(/^🗳 Голосование за исключение открыто! У вас (\d+) сек\.$/);
+    if (m) return `🗳 Exclusion vote is open! You have ${m[1]} sec.`;
+
+    m = s.match(/^🗳 Голосование завершено: (.+?) исключён\(а\) из бункера \((\d+) голос\(ов\)\)\.$/);
+    if (m) {
+      const name = m[1] === 'игрок' ? 'player' : m[1];
+      return `🗳 Vote finished: ${name} was excluded from the bunker (${m[2]} vote(s)).`;
+    }
+
+    if (s === '🗳 Голосование завершено ничьей — никто не исключён. Требуется обсуждение или повторное голосование.') {
+      return '🗳 The vote ended in a tie — no one was excluded. Discussion or a revote is needed.';
+    }
+
+    if (s === '🗳 Голосование завершено — голосов не было подано, никто не исключён.') {
+      return '🗳 The vote ended — no votes were cast, no one was excluded.';
+    }
+
+    if (s === '🔄 Игра сброшена. Возврат в лобби.') {
+      return '🔄 The game has been reset. Returning to the lobby.';
+    }
+
+    m = s.match(/^🏆 Бункер укомплектован \((\d+)\/(\d+) мест\)! Победители: (.+)\. Игра окончена\.$/);
+    if (m) return `🏆 The bunker is fully staffed (${m[1]}/${m[2]} seats)! Winners: ${m[3]}. Game over.`;
+
+    return s;
+  }
+
   const ATTR_FIELDS = [
     { key: 'ageGender', icon: 'fa-id-card' },
     { key: 'health', icon: 'fa-heart-pulse' },
@@ -1456,15 +1977,15 @@
         <div class="panel catastrophe-card">
           ${roomCodeBadgeHtml(room.code)}
           <i class="fa-solid ${catastrophe.icon} catastrophe-icon"></i>
-          <h2 class="catastrophe-title">${escapeHtml(catastrophe.title)}</h2>
-          <p class="catastrophe-desc">${escapeHtml(catastrophe.description || '')}</p>
+          <h2 class="catastrophe-title">${escapeHtml(tc(catastrophe.title))}</h2>
+          <p class="catastrophe-desc">${escapeHtml(tc(catastrophe.description || ''))}</p>
 
           <div class="bunker-params">
-            <div class="bunker-param"><div class="label"><i class="fa-solid fa-ruler-combined"></i>${t('label_size')}</div><div class="value">${escapeHtml(bunker.size || '')}</div></div>
-            <div class="bunker-param"><div class="label"><i class="fa-solid fa-hourglass-half"></i>${t('label_duration')}</div><div class="value">${escapeHtml(bunker.duration || '')}</div></div>
-            <div class="bunker-param"><div class="label"><i class="fa-solid fa-layer-group"></i>${t('label_floors')}</div><div class="value">${escapeHtml(bunker.floors || '')}</div></div>
-            <div class="bunker-param"><div class="label"><i class="fa-solid fa-door-open"></i>${t('label_extra_room')}</div><div class="value">${escapeHtml(bunker.extraRoom || '')}</div></div>
-            <div class="bunker-param"><div class="label"><i class="fa-solid fa-drumstick-bite"></i>${t('label_food')}</div><div class="value">${escapeHtml(bunker.foodSupply || '')}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-ruler-combined"></i>${t('label_size')}</div><div class="value">${escapeHtml(tc(bunker.size || ''))}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-hourglass-half"></i>${t('label_duration')}</div><div class="value">${escapeHtml(tc(bunker.duration || ''))}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-layer-group"></i>${t('label_floors')}</div><div class="value">${escapeHtml(tc(bunker.floors || ''))}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-door-open"></i>${t('label_extra_room')}</div><div class="value">${escapeHtml(tc(bunker.extraRoom || ''))}</div></div>
+            <div class="bunker-param"><div class="label"><i class="fa-solid fa-drumstick-bite"></i>${t('label_food')}</div><div class="value">${escapeHtml(tc(bunker.foodSupply || ''))}</div></div>
             <div class="bunker-param bunker-param-capacity"><div class="label"><i class="fa-solid fa-people-roof"></i>${t('label_capacity')}</div><div class="value">${bunker.capacity ? t('capacity_person_suffix', { n: bunker.capacity }) : '—'}</div></div>
           </div>
           ${bunker.capacity ? `<div class="setup-hint capacity-hint"><i class="fa-solid fa-circle-exclamation"></i> ${t('capacity_hint', { capacity: bunker.capacity })}</div>` : ''}
@@ -1546,10 +2067,10 @@
         </div>
 
         <div class="info-strip">
-          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid ${room.catastrophe ? room.catastrophe.icon : 'fa-radiation'}"></i>${t('mini_catastrophe')}</div><div class="mini-value">${escapeHtml(room.catastrophe ? room.catastrophe.title : '—')}</div></div>
-          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-ruler-combined"></i>${t('mini_bunker')}</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.size : '—')}</div></div>
-          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-hourglass-half"></i>${t('mini_duration')}</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.duration : '—')}</div></div>
-          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-drumstick-bite"></i>${t('mini_food')}</div><div class="mini-value">${escapeHtml(room.bunker ? room.bunker.foodSupply : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid ${room.catastrophe ? room.catastrophe.icon : 'fa-radiation'}"></i>${t('mini_catastrophe')}</div><div class="mini-value">${escapeHtml(room.catastrophe ? tc(room.catastrophe.title) : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-ruler-combined"></i>${t('mini_bunker')}</div><div class="mini-value">${escapeHtml(room.bunker ? tc(room.bunker.size) : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-hourglass-half"></i>${t('mini_duration')}</div><div class="mini-value">${escapeHtml(room.bunker ? tc(room.bunker.duration) : '—')}</div></div>
+          <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-drumstick-bite"></i>${t('mini_food')}</div><div class="mini-value">${escapeHtml(room.bunker ? tc(room.bunker.foodSupply) : '—')}</div></div>
           <div class="panel mini-panel"><div class="mini-title"><i class="fa-solid fa-people-roof"></i>${t('mini_capacity')}</div><div class="mini-value">${room.bunker && room.bunker.capacity ? t('capacity_person_suffix', { n: room.bunker.capacity }) : '—'}</div></div>
         </div>
 
@@ -1601,7 +2122,7 @@
               <div class="victory-winner-item">
                 <i class="fa-solid fa-user-check"></i>
                 <span class="winner-name">${escapeHtml(p.name)}</span>
-                <span class="winner-prof">${escapeHtml(p.profession || '')}</span>
+                <span class="winner-prof">${escapeHtml(tc(p.profession || ''))}</span>
               </div>
             `).join('') || `<div class="setup-hint">${t('victory_no_winners')}</div>`}
           </div>
@@ -1665,7 +2186,7 @@
 
         <div class="player-profession-strip">
           <i class="fa-solid fa-briefcase"></i>
-          <div><span class="prof-label">${t('player_profession_label')}</span><span class="prof-text">${escapeHtml(p.profession || '')}</span></div>
+          <div><span class="prof-label">${t('player_profession_label')}</span><span class="prof-text">${escapeHtml(tc(p.profession || ''))}</span></div>
         </div>
 
         <div class="attributes-list">
@@ -1705,7 +2226,7 @@
          </div>`;
 
     const showValue = isMe || revealed;
-    return `<div class="${classes.join(' ')}">${head}${showValue ? `<div class="attr-value">${escapeHtml(String(value == null ? '' : value))}</div>` : ''}</div>`;
+    return `<div class="${classes.join(' ')}">${head}${showValue ? `<div class="attr-value">${escapeHtml(tc(String(value == null ? '' : value)))}</div>` : ''}</div>`;
   }
 
   function renderVotingCardHtml(data, isHost) {
@@ -1817,7 +2338,7 @@
 
   function chatMessageHtml(m) {
     if (m.type === 'system') {
-      return `<div class="chat-message system"><i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(m.text)}</div>`;
+      return `<div class="chat-message system"><i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(translateSystemMessage(m.text))}</div>`;
     }
     return `<div class="chat-message">
       <span class="chat-author">${escapeHtml(m.playerName || t('default_player_name'))}:</span>
@@ -1995,7 +2516,7 @@
       <div class="panel modal-box">
         <i class="fa-solid fa-triangle-exclamation modal-icon"></i>
         <h3>${t('event_modal_title', { round })}</h3>
-        <p>${escapeHtml(eventText)}</p>
+        <p>${escapeHtml(tc(eventText))}</p>
         <div class="modal-actions">
           <button class="btn btn-primary" id="modal-close-btn"><i class="fa-solid fa-check"></i> ${t('btn_understood')}</button>
         </div>
@@ -2011,9 +2532,9 @@
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="panel modal-box situation-box">
-        <div class="situation-category"><i class="fa-solid ${s.icon}"></i> ${escapeHtml(s.category)}</div>
-        <h3>${escapeHtml(s.title)}</h3>
-        <p class="situation-text">${escapeHtml(s.text)}</p>
+        <div class="situation-category"><i class="fa-solid ${s.icon}"></i> ${escapeHtml(tc(s.category))}</div>
+        <h3>${escapeHtml(tc(s.title))}</h3>
+        <p class="situation-text">${escapeHtml(tc(s.text))}</p>
         <div class="setup-hint" style="margin-bottom:18px;">${t('situation_discuss_hint')}</div>
         <div class="modal-actions">
           <button class="btn btn-primary" id="situation-close-btn"><i class="fa-solid fa-check"></i> ${t('situation_close_btn')}</button>
