@@ -2258,3 +2258,260 @@ input[type="range"]::-moz-range-thumb {
     font-size: 10px;
   }
 }
+
+/* =====================================================================
+   SOUND TOGGLE (persistent, outside #app, mirrors lang switcher)
+   ===================================================================== */
+
+.sound-switcher-btn {
+  position: fixed;
+  top: 14px;
+  left: 108px;
+  z-index: 10002;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-metal);
+  border-radius: 50%;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  transition: border-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sound-switcher-btn:hover { border-color: var(--rust); color: var(--rust-light); transform: translateY(-1px); }
+.sound-switcher-btn:active { transform: translateY(0) scale(0.92); }
+.sound-switcher-btn.muted { color: var(--text-faint); }
+.sound-switcher-btn.on { color: var(--toxic); border-color: var(--toxic-dark); }
+
+@media (max-width: 640px) {
+  .sound-switcher-btn { top: 10px; left: 96px; width: 30px; height: 30px; font-size: 12px; }
+}
+
+/* =====================================================================
+   ATMOSPHERIC AMBIENT PARTICLES (embers/ash) — fixed layer created once
+   in body (outside #app) at init(), never re-rendered, so its infinite
+   CSS animations never restart/flicker on the 2.5s poll cycle.
+   ===================================================================== */
+
+.ambient-particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.ambient-particle {
+  position: absolute;
+  bottom: -20px;
+  left: var(--px, 50%);
+  width: var(--psize, 3px);
+  height: var(--psize, 3px);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--pcolor, #e8631f) 0%, transparent 75%);
+  opacity: 0;
+  animation: ember-rise var(--pdur, 14s) linear var(--pdelay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes ember-rise {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  8% { opacity: var(--pmax, 0.55); }
+  85% { opacity: var(--pmax, 0.55); }
+  100% { transform: translate(var(--pdrift, 30px), -105vh) scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-particles { display: none; }
+}
+
+/* =====================================================================
+   BUTTON RIPPLE — added dynamically on click (delegated in app.js),
+   removes itself after the animation finishes, so it never persists
+   across re-renders or accumulates.
+   ===================================================================== */
+
+.btn .ripple-el,
+.icon-toggle .ripple-el,
+.attr-reroll .ripple-el,
+.vote-btn-small .ripple-el,
+.vote-target-btn .ripple-el {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.45);
+  transform: scale(0);
+  pointer-events: none;
+  animation: ripple-pop 0.55s ease-out;
+}
+
+@keyframes ripple-pop {
+  to { transform: scale(2.6); opacity: 0; }
+}
+
+/* =====================================================================
+   PLAYER CARD ENTRANCE STAGGER — applied only when the game screen is
+   entered fresh (view change), never on background poll re-renders.
+   The stagger delay itself is set inline per-card via style="--stg:Nms"
+   by app.js, so the CSS rule stays generic.
+   ===================================================================== */
+
+.players-grid.stagger-in .player-card {
+  animation: card-in-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--stg, 0ms);
+}
+
+@keyframes card-in-stagger {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Subtle shine sweep on hover for player cards */
+.player-card {
+  will-change: transform;
+}
+.player-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.05) 50%, transparent 60%);
+  background-size: 220% 220%;
+  background-position: 120% 0;
+  transition: background-position 0.6s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.player-card:hover::before { background-position: -20% 0; }
+.player-card:hover { transform: translateY(-2px); }
+
+/* =====================================================================
+   CHAT — entrance animation for genuinely NEW messages only (app.js adds
+   the .msg-in class solely to messages beyond the previously-seen count,
+   so old messages re-rendered by polling never replay this animation).
+   ===================================================================== */
+
+@keyframes chat-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.chat-message.msg-in { animation: chat-msg-in 0.3s ease; }
+
+.chat-message.system.msg-in {
+  animation: chat-msg-in 0.3s ease, system-flash 0.9s ease;
+}
+@keyframes system-flash {
+  0% { background: rgba(184,70,14,0.18); }
+  100% { background: transparent; }
+}
+
+/* =====================================================================
+   ONBOARDING HINT BANNER — dismissible strip on the game screen guiding
+   new players through the core loop (reveal / convince / vote).
+   ===================================================================== */
+
+.game-hint-banner {
+  max-width: 1200px;
+  margin: 0 auto 18px;
+  padding: 0 16px;
+}
+
+.game-hint-banner .hint-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(139,181,44,0.1), var(--bg-panel-2));
+  border: 1px dashed var(--toxic-dark);
+  border-radius: 10px;
+  padding: 12px 14px;
+  animation: fade-in 0.4s ease;
+}
+
+.game-hint-banner .hint-icon {
+  color: var(--toxic);
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.game-hint-banner .hint-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.game-hint-banner .hint-text strong { color: var(--text-main); }
+
+.game-hint-banner .hint-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-metal);
+  background: var(--bg-panel);
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+.game-hint-banner .hint-close:hover { color: var(--danger-light); border-color: var(--danger); }
+
+/* =====================================================================
+   VICTORY CONFETTI — one-shot burst generated by app.js only on genuine
+   view-enter into the victory screen; pieces remove themselves via
+   animationend, so nothing lingers across polling re-renders.
+   ===================================================================== */
+
+.confetti-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  left: var(--cx, 50%);
+  width: var(--csize, 8px);
+  height: calc(var(--csize, 8px) * 0.4);
+  background: var(--ccolor, var(--toxic));
+  opacity: 0.9;
+  animation: confetti-fall var(--cdur, 2.4s) ease-in var(--cdelay, 0s) forwards;
+  transform: rotate(var(--crot, 0deg));
+}
+
+@keyframes confetti-fall {
+  to { transform: translateY(70vh) rotate(calc(var(--crot, 0deg) + 340deg)); opacity: 0; }
+}
+
+/* =====================================================================
+   VOTE / TIMER extra emphasis when time is critically low
+   ===================================================================== */
+
+.timer-pill.voting.urgent-pill {
+  animation: blink-warn 0.8s infinite;
+  box-shadow: 0 0 14px rgba(198,43,43,0.45);
+}
+
+/* Landing page: gentle continuous glow on the main icon — safe here
+   because the landing screen is not affected by room-state polling. */
+.mp-home-screen .top-title i {
+  animation: pulse-glow 3.2s ease-in-out infinite;
+}
+
+/* First-visit spotlight pulse used to draw attention to a specific
+   control once (e.g. an unrevealed attribute) — toggled briefly by JS. */
+@keyframes spotlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217,167,33,0.0); }
+  50% { box-shadow: 0 0 0 6px rgba(217,167,33,0.25); }
+}
+.spotlight-once { animation: spotlight-pulse 1.4s ease-in-out 2; }

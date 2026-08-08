@@ -8,6 +8,8 @@
   const SESSION_KEY = 'bunker_mp_session_v1';
   const DEFAULT_NAME_KEY = 'bunker_default_name_v1';
   const LANG_KEY = 'shelter_lang_v1';
+  const SOUND_KEY = 'shelter_sound_v1';
+  const SEEN_HOWTO_KEY = 'shelter_seen_howto_v1';
   const POLL_INTERVAL = 2500;
   const API_BASE = '/api/room';
 
@@ -65,6 +67,12 @@
       btn_understood: 'Понятно',
       toast_error_title: 'Ошибка',
       lang_switch_title: 'Переключить язык интерфейса',
+      sound_switch_title_on: 'Звук включён — выключить',
+      sound_switch_title_off: 'Звук выключен — включить',
+
+      // Подсказка на игровом экране (онбординг)
+      game_hint_text: '<strong>Как играть:</strong> раскрывайте свои характеристики (по одной за раунд) и убеждайте остальных вслух, почему вас стоит оставить. С 3-го раунда хост открывает голосование — минимум мест, выживает больше, чем вместимость бункера позволяет.',
+      game_hint_close_title: 'Скрыть подсказку',
 
       // Лендинг
       landing_subtitle: 'сетевая игра на выживание — каждый со своего устройства',
@@ -307,6 +315,11 @@
       btn_understood: 'Got it',
       toast_error_title: 'Error',
       lang_switch_title: 'Switch interface language',
+      sound_switch_title_on: 'Sound on — mute',
+      sound_switch_title_off: 'Sound off — unmute',
+
+      game_hint_text: '<strong>How to play:</strong> reveal your attributes one at a time each round and convince everyone out loud why you should stay. Starting from round 3, the host opens a vote — fewer seats exist than survivors, so the bunker capacity decides who wins.',
+      game_hint_close_title: 'Hide this hint',
 
       landing_subtitle: 'an online survival game — everyone joins from their own device',
       btn_play: 'Play',
@@ -1055,6 +1068,271 @@
   ];
 
   // ---------------------------------------------------------------------
+  // ЗВУК — лёгкий синтезатор на Web Audio API, без внешних аудиофайлов
+  // (не требует размещения бинарных ассетов на Cloudflare Pages).
+  // Все звуки — короткие процедурно сгенерированные сигналы. Включение/
+  // выключение хранится в localStorage и переключается отдельной кнопкой,
+  // симметричной языковому переключателю.
+  // ---------------------------------------------------------------------
+
+  let audioCtx = null;
+  let soundOn = getSoundPref();
+  let soundSwitcherEl = null;
+
+  function getSoundPref() {
+    try {
+      const v = localStorage.getItem(SOUND_KEY);
+      return v === null ? true : v === '1';
+    } catch (e) { return true; }
+  }
+
+  function setSoundPref(on) {
+    soundOn = on;
+    try { localStorage.setItem(SOUND_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+    updateSoundSwitcherUI();
+  }
+
+  function ensureAudioCtx() {
+    if (!soundOn) return null;
+    if (!audioCtx) {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      } catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  // Проигрывает последовательность коротких тонов (простой синтез огибающей).
+  // notes: [{ freq, start, dur, type, gain }]
+  function playTones(notes) {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return;
+    const master = ctx.createGain();
+    master.gain.value = 0.22;
+    master.connect(ctx.destination);
+    notes.forEach((n) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = n.type || 'sine';
+      osc.frequency.value = n.freq;
+      const t0 = ctx.currentTime + (n.start || 0);
+      const dur = n.dur || 0.12;
+      const peak = n.gain != null ? n.gain : 0.9;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(peak, t0 + Math.min(0.02, dur * 0.3));
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.02);
+    });
+  }
+
+  function playNoiseBurst(dur, gainPeak) {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return;
+    const bufSize = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.value = gainPeak != null ? gainPeak : 0.15;
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start();
+  }
+
+  const SFX = {
+    click: () => playTones([{ freq: 720, start: 0, dur: 0.06, type: 'triangle', gain: 0.5 }]),
+    reveal: () => playTones([
+      { freq: 440, start: 0, dur: 0.1, type: 'sine', gain: 0.6 },
+      { freq: 660, start: 0.07, dur: 0.16, type: 'sine', gain: 0.7 },
+    ]),
+    exclude: () => playTones([
+      { freq: 300, start: 0, dur: 0.18, type: 'sawtooth', gain: 0.5 },
+      { freq: 180, start: 0.1, dur: 0.28, type: 'sawtooth', gain: 0.55 },
+    ]),
+    vote: () => playTones([{ freq: 520, start: 0, dur: 0.08, type: 'square', gain: 0.35 }]),
+    alarm: () => {
+      playNoiseBurst(0.25, 0.08);
+      playTones([
+        { freq: 220, start: 0, dur: 0.22, type: 'sawtooth', gain: 0.55 },
+        { freq: 196, start: 0.24, dur: 0.22, type: 'sawtooth', gain: 0.55 },
+      ]);
+    },
+    victory: () => playTones([
+      { freq: 523.25, start: 0, dur: 0.18, type: 'triangle', gain: 0.6 },
+      { freq: 659.25, start: 0.15, dur: 0.18, type: 'triangle', gain: 0.6 },
+      { freq: 784.0, start: 0.3, dur: 0.32, type: 'triangle', gain: 0.7 },
+    ]),
+    message: () => playTones([{ freq: 900, start: 0, dur: 0.05, type: 'sine', gain: 0.3 }]),
+    toast: () => playTones([{ freq: 600, start: 0, dur: 0.07, type: 'sine', gain: 0.4 }]),
+    timerTick: () => playTones([{ freq: 1100, start: 0, dur: 0.04, type: 'square', gain: 0.22 }]),
+    open: () => playTones([
+      { freq: 330, start: 0, dur: 0.09, type: 'triangle', gain: 0.45 },
+      { freq: 494, start: 0.06, dur: 0.12, type: 'triangle', gain: 0.5 },
+    ]),
+  };
+
+  function playSfx(name) {
+    if (!soundOn) return;
+    const fn = SFX[name];
+    if (fn) { try { fn(); } catch (e) { /* ignore autoplay/policy errors */ } }
+  }
+
+  function ensureSoundSwitcher() {
+    soundSwitcherEl = document.getElementById('sound-switcher-btn');
+    if (!soundSwitcherEl) {
+      soundSwitcherEl = document.createElement('button');
+      soundSwitcherEl.id = 'sound-switcher-btn';
+      soundSwitcherEl.className = 'sound-switcher-btn';
+      soundSwitcherEl.type = 'button';
+      soundSwitcherEl.addEventListener('click', () => {
+        setSoundPref(!soundOn);
+        if (soundOn) { ensureAudioCtx(); playSfx('click'); }
+      });
+      document.body.appendChild(soundSwitcherEl);
+    }
+    updateSoundSwitcherUI();
+  }
+
+  function updateSoundSwitcherUI() {
+    if (!soundSwitcherEl) return;
+    soundSwitcherEl.classList.toggle('on', soundOn);
+    soundSwitcherEl.classList.toggle('muted', !soundOn);
+    soundSwitcherEl.title = t(soundOn ? 'sound_switch_title_on' : 'sound_switch_title_off');
+    soundSwitcherEl.innerHTML = `<i class="fa-solid ${soundOn ? 'fa-volume-high' : 'fa-volume-xmark'}"></i>`;
+  }
+
+  // ---------------------------------------------------------------------
+  // АТМОСФЕРНЫЕ ЧАСТИЦЫ (искры/пепел) — создаются один раз в body при
+  // init(), вне #app, поэтому НЕ пересоздаются при перерисовке экрана
+  // поллингом и их бесконечные CSS-анимации никогда не "мигают".
+  // ---------------------------------------------------------------------
+
+  function ensureAmbientParticles() {
+    if (document.getElementById('ambient-particles')) return;
+    const layer = document.createElement('div');
+    layer.id = 'ambient-particles';
+    layer.className = 'ambient-particles';
+    layer.setAttribute('aria-hidden', 'true');
+    const colors = ['#e8631f', '#b8460e', '#d9a721'];
+    const count = window.innerWidth < 640 ? 10 : 18;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('span');
+      p.className = 'ambient-particle';
+      const size = (2 + Math.random() * 3).toFixed(1);
+      const dur = (10 + Math.random() * 10).toFixed(1);
+      const delay = (-Math.random() * 20).toFixed(1);
+      const drift = Math.round((Math.random() - 0.5) * 120);
+      const maxOpacity = (0.25 + Math.random() * 0.35).toFixed(2);
+      p.style.setProperty('--px', Math.random() * 100 + '%');
+      p.style.setProperty('--psize', size + 'px');
+      p.style.setProperty('--pdur', dur + 's');
+      p.style.setProperty('--pdelay', delay + 's');
+      p.style.setProperty('--pdrift', drift + 'px');
+      p.style.setProperty('--pmax', maxOpacity);
+      p.style.setProperty('--pcolor', colors[i % colors.length]);
+      layer.appendChild(p);
+    }
+    document.body.appendChild(layer);
+  }
+
+  // ---------------------------------------------------------------------
+  // RIPPLE — делегированный обработчик клика по кнопкам: добавляет
+  // короткоживущий элемент .ripple-el, который сам удаляет себя после
+  // окончания анимации. Не хранит состояние и не влияет на рендер.
+  // ---------------------------------------------------------------------
+
+  function attachGlobalRipple() {
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('.btn, .icon-toggle, .attr-reroll, .vote-btn-small, .vote-target-btn, .mp-tab, .seat-cell.empty');
+      if (!target || target.disabled) return;
+      const rect = target.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height) * 1.4;
+      const ripple = document.createElement('span');
+      ripple.className = 'ripple-el';
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      const prevPosition = getComputedStyle(target).position;
+      if (prevPosition === 'static') target.style.position = 'relative';
+      target.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    }, true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Конфетти на экране победы — одноразовый залп, генерируется только
+  // при реальном переходе на экран victory (не при поллинге).
+  // ---------------------------------------------------------------------
+
+  function spawnConfetti() {
+    const layer = document.getElementById('confetti-layer');
+    if (!layer) return;
+    const colors = ['var(--toxic)', 'var(--warning)', 'var(--rust-light)', '#e8631f', '#d9a721'];
+    const count = window.innerWidth < 640 ? 40 : 70;
+    let html = '';
+    for (let i = 0; i < count; i++) {
+      const cx = Math.random() * 100;
+      const csize = 5 + Math.random() * 7;
+      const ccolor = colors[Math.floor(Math.random() * colors.length)];
+      const cdur = 1.8 + Math.random() * 1.6;
+      const cdelay = Math.random() * 0.5;
+      const crot = Math.round(Math.random() * 360);
+      html += `<span class="confetti-piece" style="--cx:${cx}%;--csize:${csize}px;--ccolor:${ccolor};--cdur:${cdur}s;--cdelay:${cdelay}s;--crot:${crot}deg;"></span>`;
+    }
+    layer.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------------
+  // Онбординг: подсказка "как играть" на игровом экране (первый вход
+  // в игру за сессию) + модалка "как начать" при первом визите вообще.
+  // ---------------------------------------------------------------------
+
+  let gameHintDismissed = false;
+
+  function maybeShowFirstVisitHowTo() {
+    try {
+      if (localStorage.getItem(SEEN_HOWTO_KEY)) return;
+      localStorage.setItem(SEEN_HOWTO_KEY, '1');
+    } catch (e) { /* ignore */ }
+    setTimeout(() => showHowToModal(), 900);
+  }
+
+  function gameHintBannerHtml() {
+    if (gameHintDismissed) return '';
+    try { if (localStorage.getItem(SEEN_HOWTO_KEY + '_hint_dismissed')) return ''; } catch (e) { /* ignore */ }
+    return `
+      <div class="game-hint-banner" id="game-hint-banner">
+        <div class="hint-inner">
+          <i class="fa-solid fa-lightbulb hint-icon"></i>
+          <div class="hint-text">${t('game_hint_text')}</div>
+          <button class="hint-close" id="game-hint-close-btn" title="${t('game_hint_close_title')}" type="button">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function attachGameHintHandler() {
+    const closeBtn = document.getElementById('game-hint-close-btn');
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+      gameHintDismissed = true;
+      try { localStorage.setItem(SEEN_HOWTO_KEY + '_hint_dismissed', '1'); } catch (e) { /* ignore */ }
+      const banner = document.getElementById('game-hint-banner');
+      if (banner) banner.remove();
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Состояние клиента
   // ---------------------------------------------------------------------
 
@@ -1074,6 +1352,7 @@
   let seenSituationSig = undefined;
   let lastKnownStatus = null;
   let autoFinalizeInFlight = false;
+  let lastSeenChatCount = -1; // -1 = ещё не рендерили чат в этой сессии (не проигрывать анимацию на всю историю)
 
   const appEl = document.getElementById('app');
   let toastContainer = null;
@@ -1086,6 +1365,9 @@
   function init() {
     ensureToastContainer();
     ensureLangSwitcher();
+    ensureSoundSwitcher();
+    ensureAmbientParticles();
+    attachGlobalRipple();
 
     const params = new URLSearchParams(location.search);
     const roomFromUrl = (params.get('room') || '').toUpperCase().trim();
@@ -1096,8 +1378,10 @@
       homeScreen = 'play';
       joinCodeDraft = roomFromUrl;
       renderHome();
+      maybeShowFirstVisitHowTo();
     } else {
       renderHome();
+      maybeShowFirstVisitHowTo();
     }
 
     if (!tickHandle) {
@@ -1327,6 +1611,25 @@
     if (isViewChange) {
       const screenEl = appEl.querySelector('.screen, .catastrophe-screen');
       if (screenEl) screenEl.classList.add('view-enter');
+
+      if (view === 'game') {
+        const grid = document.getElementById('players-grid');
+        if (grid) {
+          grid.classList.add('stagger-in');
+          Array.from(grid.children).forEach((card, i) => {
+            card.style.setProperty('--stg', (i * 70) + 'ms');
+          });
+        }
+      }
+
+      if (view === 'victory') {
+        spawnConfetti();
+        playSfx('victory');
+      }
+
+      if (view === 'catastrophe') {
+        playSfx('alarm');
+      }
     }
 
     restoreInputs(preserved);
@@ -1342,6 +1645,17 @@
       el.textContent = formatCountdown(remain);
       el.classList.toggle('urgent', remain <= 15 && remain > 0);
       el.classList.toggle('expired', remain <= 0);
+      const pill = el.closest('.timer-pill');
+      if (pill) pill.classList.toggle('urgent-pill', remain <= 15 && remain > 0);
+      // Тикающий звук последних секунд — только один раз на каждую целую секунду 5..1,
+      // а не на каждый вызов tick() (тик идёт каждые 250мс).
+      if (remain > 0 && remain <= 5) {
+        const lastPlayed = Number(el.dataset.lastTickSec || -1);
+        if (lastPlayed !== remain) {
+          el.dataset.lastTickSec = String(remain);
+          playSfx('timerTick');
+        }
+      }
     });
     maybeAutoFinalizeVote();
   }
@@ -1834,6 +2148,11 @@
     lastData = null;
     currentView = null;
     pendingSlot = null;
+    lastSeenChatCount = -1;
+    seenEventRound = null;
+    seenSituationSig = undefined;
+    lastKnownStatus = null;
+    gameHintDismissed = false;
     homeScreen = 'landing';
     renderHome();
   }
@@ -2058,6 +2377,8 @@
           </div>
         </div>
 
+        ${gameHintBannerHtml()}
+
         <div class="survivors-bar-wrap">
           <div class="survivors-bar-label">
             <span><i class="fa-solid fa-people-roof"></i> ${t('survivors_label', { alive: aliveCount, total: totalCount })}${room.bunker && room.bunker.capacity ? t('target_suffix', { capacity: room.bunker.capacity }) : ''}</span>
@@ -2092,6 +2413,7 @@
     `;
 
     attachGameHandlers(data, isHost);
+    attachGameHintHandler();
   }
 
   // ---------------------------------------------------------------------
@@ -2110,6 +2432,7 @@
     appEl.innerHTML = `
       <div class="catastrophe-screen victory-screen">
         ${sceneBackdropHtml('safe')}
+        <div class="confetti-layer" id="confetti-layer"></div>
         <div class="catastrophe-alert victory-alert"><i class="fa-solid fa-trophy"></i> ${t('victory_alert')} <i class="fa-solid fa-trophy"></i></div>
         <div class="panel catastrophe-card victory-card">
           ${roomCodeBadgeHtml(room.code)}
@@ -2311,7 +2634,21 @@
   function renderChatCardHtml(data, isHost) {
     const room = data.room;
     const chat = data.chat || [];
+    const me = data.me;
     const discussionTimer = room.timer && room.timer.type === 'discussion' ? room.timer : null;
+
+    // Определяем, какие сообщения "новые" с прошлого рендера этой карточки,
+    // чтобы проиграть входную анимацию только для них (а не для всей истории
+    // чата заново на каждый поллинг раз в 2.5с).
+    const newStartIdx = lastSeenChatCount < 0 ? chat.length : Math.min(lastSeenChatCount, chat.length);
+    const hasGenuinelyNew = lastSeenChatCount >= 0 && chat.length > lastSeenChatCount;
+    if (hasGenuinelyNew) {
+      const newest = chat[chat.length - 1];
+      if (newest && newest.type !== 'system' && (!me || newest.playerId !== me.id)) {
+        playSfx('message');
+      }
+    }
+    lastSeenChatCount = chat.length;
 
     return `
       <div class="chat-header">
@@ -2327,7 +2664,7 @@
         </div>
       ` : ''}
       <div class="chat-messages" id="chat-messages">
-        ${chat.map((m) => chatMessageHtml(m)).join('')}
+        ${chat.map((m, i) => chatMessageHtml(m, i >= newStartIdx)).join('')}
       </div>
       <div class="chat-form">
         <input type="text" id="chat-input" class="chat-input" placeholder="${t('chat_input_placeholder')}" maxlength="500" autocomplete="off" />
@@ -2336,11 +2673,12 @@
     `;
   }
 
-  function chatMessageHtml(m) {
+  function chatMessageHtml(m, isNew) {
+    const newCls = isNew ? ' msg-in' : '';
     if (m.type === 'system') {
-      return `<div class="chat-message system"><i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(translateSystemMessage(m.text))}</div>`;
+      return `<div class="chat-message system${newCls}"><i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(translateSystemMessage(m.text))}</div>`;
     }
-    return `<div class="chat-message">
+    return `<div class="chat-message${newCls}">
       <span class="chat-author">${escapeHtml(m.playerName || t('default_player_name'))}:</span>
       <span class="chat-text">${escapeHtml(m.text)}</span>
     </div>`;
@@ -2364,13 +2702,13 @@
     if (isHost) {
       const situationBtn = document.getElementById('situation-btn');
       if (situationBtn) situationBtn.addEventListener('click', async () => {
-        try { await api('post', `/${session.code}/situation`, {}); await pollOnce(); }
+        try { await api('post', `/${session.code}/situation`, {}); playSfx('alarm'); await pollOnce(); }
         catch (e) { showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation'); }
       });
 
       const nextRoundBtn = document.getElementById('next-round-btn');
       if (nextRoundBtn) nextRoundBtn.addEventListener('click', async () => {
-        try { await api('post', `/${session.code}/next-round`, { seconds: 180 }); await pollOnce(); }
+        try { await api('post', `/${session.code}/next-round`, { seconds: 180 }); playSfx('open'); await pollOnce(); }
         catch (e) { showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation'); }
       });
 
@@ -2399,7 +2737,7 @@
         const text = chatInput.value.trim();
         if (!text) return;
         chatInput.value = '';
-        try { await api('post', `/${session.code}/chat`, { text }); await pollOnce(); }
+        try { await api('post', `/${session.code}/chat`, { text }); playSfx('click'); await pollOnce(); }
         catch (e) { showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation'); }
       };
       chatSendBtn.addEventListener('click', sendChat);
@@ -2419,21 +2757,21 @@
     const revealHead = e.target.closest('[data-action="reveal"]');
     if (revealHead) {
       const field = revealHead.dataset.field;
-      try { await api('post', `/${session.code}/reveal`, { field }); await pollOnce(); }
+      try { await api('post', `/${session.code}/reveal`, { field }); playSfx('reveal'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
     }
     const excludeBtn = e.target.closest('[data-action="exclude"]');
     if (excludeBtn) {
       const targetId = Number(excludeBtn.dataset.targetId);
-      try { await api('post', `/${session.code}/exclude`, { playerId: targetId }); await pollOnce(); }
+      try { await api('post', `/${session.code}/exclude`, { playerId: targetId }); playSfx('exclude'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
     }
     const voteBtn = e.target.closest('[data-action="vote"]');
     if (voteBtn) {
       const targetId = Number(voteBtn.dataset.targetId);
-      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); await pollOnce(); }
+      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); playSfx('vote'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
     }
   }
@@ -2443,20 +2781,20 @@
     if (startBtn) {
       const input = document.getElementById('voting-seconds-input');
       const seconds = Math.min(Math.max(Number(input ? input.value : 60) || 60, 15), 900);
-      try { await api('post', `/${session.code}/vote/start`, { seconds }); await pollOnce(); }
+      try { await api('post', `/${session.code}/vote/start`, { seconds }); playSfx('open'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
     }
     const finalizeBtn = e.target.closest('#vote-finalize-btn');
     if (finalizeBtn) {
-      try { await api('post', `/${session.code}/vote/finalize`, {}); await pollOnce(); }
+      try { await api('post', `/${session.code}/vote/finalize`, {}); playSfx('exclude'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
     }
     const voteBtn = e.target.closest('[data-action="vote"]');
     if (voteBtn) {
       const targetId = Number(voteBtn.dataset.targetId);
-      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); await pollOnce(); }
+      try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); playSfx('vote'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
     }
   }
@@ -2523,6 +2861,7 @@
       </div>
     `;
     document.body.appendChild(overlay);
+    playSfx('alarm');
     document.getElementById('modal-close-btn').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
@@ -2542,6 +2881,7 @@
       </div>
     `;
     document.body.appendChild(overlay);
+    playSfx('open');
     document.getElementById('situation-close-btn').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
@@ -2559,6 +2899,7 @@
       <div>${escapeHtml(message)}</div>
     `;
     toastContainer.appendChild(toast);
+    playSfx('toast');
     setTimeout(() => {
       toast.classList.add('fade-out');
       setTimeout(() => toast.remove(), 320);
