@@ -47,6 +47,7 @@
       err_player_not_found: 'Игрок не найден.',
       err_cannot_vote_self: 'Нельзя голосовать за самого себя.',
       err_game_ended: 'Игра уже завершена — начните новую игру.',
+      err_not_enough_alive_for_vote: 'Нужно минимум 3 живых игрока, чтобы начать голосование.',
       err_generic: 'Что-то пошло не так. Попробуйте ещё раз.',
 
       // Характеристики персонажа
@@ -240,24 +241,39 @@
       exclude_toggle_title: 'Исключить/вернуть',
       vote_own: 'Твой голос',
       vote_against: 'Голосовать против',
+      vote_change: 'Изменить голос',
       reroll_title: 'Перебросить, пока скрыто от других',
+      voted_for_badge: 'Голосует за меня',
+      votes_received: '{count} голос.',
 
       // Голосование
       voting_round_title: 'Голосование — раунд {round}',
       votes_cast: 'Голосов подано: {cast} / {total}',
+      voting_progress_label: 'Проголосовали',
+      voting_waiting_for: 'Ждём голос: {names}',
+      voting_all_voted: 'Все проголосовали!',
+      voting_leader_note: 'Сейчас лидирует: {name} ({votes} голос.)',
+      voting_leader_tie_note: 'Пока ничья между несколькими игроками',
+      voting_no_votes_note: 'Пока никто не проголосовал',
       finalize_btn: 'Завершить голосование',
       finalize_disabled_title: 'Завершить раньше времени может только хост',
+      cancel_vote_btn: 'Отменить голосование',
+      cancel_vote_confirm_title: 'Отменить голосование?',
+      cancel_vote_confirm_desc: 'Все текущие голоса будут аннулированы. Это действие нельзя отменить.',
       voting_result_title: 'Итоги голосования (раунд {round})',
       voting_result_none: 'Никто не был исключён.',
       voting_result_excluded: 'Исключён(а): {name} ({votes} голос.)',
       voting_result_tie: 'Ничья — никто не исключён.',
       voting_new_vote_btn: 'Новое голосование',
       voting_locked_hint: 'Голосование откроется начиная с {threshold}-го раунда. Сейчас раунд {round}.',
+      voting_locked_players_hint: 'Нужно минимум 3 живых игрока для голосования.',
       voting_title: 'Голосование',
       voting_host_hint: 'Запустите голосование за исключение — у всех будет ограниченное время на голос.',
       voting_start_btn: 'Начать голосование',
       voting_seconds_suffix: 'сек.',
       voting_available_hint: 'Голосование доступно — хост может его запустить в любой момент.',
+      voting_you_voted_hint: 'Ты уже проголосовал(а). Нажми на другого игрока, чтобы изменить голос.',
+      voting_vote_now_hint: 'Выбери игрока в списке справа или на его карточке, чтобы отдать голос.',
 
       // Чат
       chat_title: 'Чат бункера',
@@ -297,6 +313,7 @@
       err_player_not_found: 'Player not found.',
       err_cannot_vote_self: 'You cannot vote for yourself.',
       err_game_ended: 'The game has already ended — start a new game.',
+      err_not_enough_alive_for_vote: 'At least 3 alive players are needed to start a vote.',
       err_generic: 'Something went wrong. Please try again.',
 
       attr_ageGender: 'Age / gender',
@@ -476,23 +493,38 @@
       exclude_toggle_title: 'Exclude / restore',
       vote_own: 'Your vote',
       vote_against: 'Vote against',
+      vote_change: 'Change vote',
       reroll_title: 'Reroll while hidden from others',
+      voted_for_badge: 'Voting for me',
+      votes_received: '{count} votes',
 
       voting_round_title: 'Voting — round {round}',
       votes_cast: 'Votes cast: {cast} / {total}',
+      voting_progress_label: 'Voted',
+      voting_waiting_for: 'Waiting for: {names}',
+      voting_all_voted: 'Everyone has voted!',
+      voting_leader_note: 'Currently leading: {name} ({votes} votes)',
+      voting_leader_tie_note: 'Currently tied between several players',
+      voting_no_votes_note: 'No votes cast yet',
       finalize_btn: 'End voting',
       finalize_disabled_title: 'Only the host can end the vote early',
+      cancel_vote_btn: 'Cancel voting',
+      cancel_vote_confirm_title: 'Cancel this vote?',
+      cancel_vote_confirm_desc: 'All votes cast so far will be discarded. This cannot be undone.',
       voting_result_title: 'Voting results (round {round})',
       voting_result_none: 'No one was excluded.',
       voting_result_excluded: 'Excluded: {name} ({votes} votes)',
       voting_result_tie: 'Tie — no one excluded.',
       voting_new_vote_btn: 'New vote',
       voting_locked_hint: 'Voting opens starting from round {threshold}. Currently round {round}.',
+      voting_locked_players_hint: 'At least 3 alive players are required to vote.',
       voting_title: 'Voting',
       voting_host_hint: 'Start an exclusion vote — everyone will have a limited time to vote.',
       voting_start_btn: 'Start voting',
       voting_seconds_suffix: 'sec.',
       voting_available_hint: 'Voting is available — the host can start it at any time.',
+      voting_you_voted_hint: 'You already voted. Tap another player to change your vote.',
+      voting_vote_now_hint: 'Pick a player on the right or on their card to cast your vote.',
 
       chat_title: 'Bunker chat',
       discussion_timer_btn: 'Discussion timer',
@@ -1044,6 +1076,10 @@
 
     if (s === '🗳 Голосование завершено — голосов не было подано, никто не исключён.') {
       return '🗳 The vote ended — no votes were cast, no one was excluded.';
+    }
+
+    if (s === '🗳 Голосование отменено хостом.') {
+      return '🗳 The vote was cancelled by the host.';
     }
 
     if (s === '🔄 Игра сброшена. Возврат в лобби.') {

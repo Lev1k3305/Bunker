@@ -170,15 +170,32 @@ async function buildState(db: D1Database, code: string, requesterToken?: string)
     for (const b of ballots) {
       tally[b.target_player_id] = (tally[b.target_player_id] || 0) + 1;
     }
+    const aliveVoters = (playerRows as any[]).filter((p) => !p.excluded && p.claimed);
+    const votedIds = new Set(ballots.map((b) => b.voter_player_id));
+    const nonVoters = aliveVoters
+      .filter((p) => !votedIds.has(p.id))
+      .map((p) => ({ id: p.id, name: p.name }));
+
+    // Текущий лидер голосования (для live-подсветки, не является итогом —
+    // финальный результат считается отдельно при finalize)
+    const tallyEntries = Object.entries(tally);
+    let currentLeaders: number[] = [];
+    if (tallyEntries.length > 0) {
+      const maxVotes = Math.max(...tallyEntries.map(([, v]) => v as number));
+      currentLeaders = tallyEntries.filter(([, v]) => v === maxVotes).map(([id]) => Number(id));
+    }
+
     voting = {
       id: activeVote.id,
       round: activeVote.round,
       status: activeVote.status,
       endsAt: activeVote.ends_at,
-      totalVoters: (playerRows as any[]).filter((p) => !p.excluded && p.claimed).length,
+      totalVoters: aliveVoters.length,
       votesCast: ballots.length,
       myVoteTargetId: me ? (ballots.find((b) => b.voter_player_id === me.id)?.target_player_id || null) : null,
       tally,
+      nonVoters,
+      currentLeaders,
     };
   } else {
     const lastVote = await getLastFinishedVote(db, code);
@@ -654,6 +671,10 @@ rooms.post('/:code/vote/start', async (c) => {
   const existingActive = await getActiveVote(db, code);
   if (existingActive) return c.json({ error: 'vote_already_active' }, 400);
 
+  const playerRows = (await getPlayers(db, code)) as any[];
+  const aliveCount = playerRows.filter((p) => p.claimed && !p.excluded).length;
+  if (aliveCount < 3) return c.json({ error: 'not_enough_alive_for_vote' }, 400);
+
   const endsAt = Date.now() + seconds * 1000;
   const result = await db.prepare(
     `INSERT INTO votes (room_code, round, status, ends_at) VALUES (?, ?, 'active', ?)`
@@ -748,6 +769,26 @@ rooms.post('/:code/vote/finalize', async (c) => {
   }
 
   return c.json({ ok: true, result });
+});
+
+rooms.post('/:code/vote/cancel', async (c) => {
+  const db = c.env.DB;
+  const code = c.req.param('code').toUpperCase();
+  const token = c.req.header('X-Player-Token') || '';
+
+  const room = await getRoom(db, code);
+  if (!room) return c.json({ error: 'room_not_found' }, 404);
+  const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
+  if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
+
+  const activeVote = await getActiveVote(db, code);
+  if (!activeVote) return c.json({ error: 'no_active_vote' }, 400);
+
+  await db.prepare(`UPDATE votes SET status='cancelled' WHERE id=?`).bind(activeVote.id).run();
+  await db.prepare(`UPDATE rooms SET timer_json=NULL WHERE code=?`).bind(code).run();
+  await addSystemMessage(db, code, `🗳 Голосование отменено хостом.`);
+
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------
