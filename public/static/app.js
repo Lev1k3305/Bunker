@@ -2524,13 +2524,17 @@
     const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
     const isHostSeat = ctx.room.hostPlayerId === p.id;
     const isMe = !!p.isMe;
-    const votingActive = ctx.data.voting && ctx.data.voting.status === 'active';
+    const voting = ctx.data.voting;
+    const votingActive = voting && voting.status === 'active';
     const meExcluded = !!(ctx.data.players.find((x) => x.isMe) || {}).excluded;
     const canVoteFor = votingActive && !isMe && !p.excluded && !meExcluded;
-    const myVoteTargetId = ctx.data.voting ? ctx.data.voting.myVoteTargetId : null;
+    const myVoteTargetId = votingActive ? voting.myVoteTargetId : null;
+    const voteCount = votingActive ? (voting.tally[p.id] || 0) : 0;
+    const isVoteLeader = votingActive && voting.currentLeaders && voting.currentLeaders.length === 1 && voting.currentLeaders[0] === p.id && voteCount > 0;
+    const iAmVotingForThem = canVoteFor && myVoteTargetId === p.id;
 
     return `
-      <div class="player-card ${p.excluded ? 'excluded' : ''} ${isMe ? 'is-me' : ''}" id="card-${p.id}">
+      <div class="player-card ${p.excluded ? 'excluded' : ''} ${isMe ? 'is-me' : ''} ${isVoteLeader ? 'vote-leader' : ''}" id="card-${p.id}">
         <div class="player-card-head">
           <div class="player-avatar">${initial}</div>
           <div class="player-name-static">
@@ -2538,6 +2542,11 @@
             ${isMe ? `<span class="me-badge">${t('seat_me_badge')}</span>` : ''}
             ${isHostSeat ? `<span class="host-badge" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></span>` : ''}
           </div>
+          ${votingActive ? `
+            <div class="card-vote-badge ${isVoteLeader ? 'is-leader' : ''}" title="${t('votes_received', { count: voteCount })}">
+              <i class="fa-solid fa-square-poll-vertical"></i>${voteCount}
+            </div>
+          ` : ''}
           <div class="player-card-actions">
             ${ctx.isHost ? `<button class="icon-toggle ${p.excluded ? 'active' : ''}" data-action="exclude" data-target-id="${p.id}" title="${t('exclude_toggle_title')}"><i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i></button>` : ''}
           </div>
@@ -2553,8 +2562,8 @@
         </div>
 
         ${canVoteFor ? `
-          <button class="vote-target-btn ${myVoteTargetId === p.id ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}">
-            <i class="fa-solid fa-square-poll-vertical"></i> ${myVoteTargetId === p.id ? t('vote_own') : t('vote_against')}
+          <button class="vote-target-btn ${iAmVotingForThem ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}">
+            <i class="fa-solid fa-square-poll-vertical"></i> ${iAmVotingForThem ? t('vote_own') : t('vote_against')}
           </button>
         ` : ''}
       </div>
@@ -2594,31 +2603,76 @@
     const votingUnlocked = room.round >= room.votingThreshold;
     const alivePlayers = data.players.filter((p) => p.claimed && !p.excluded);
     const meExcluded = !!(data.players.find((p) => p.isMe) || {}).excluded;
+    const enoughAliveForVote = alivePlayers.length >= 3;
 
     if (voting && voting.status === 'active') {
       const canFinalizeNow = isHost || Number(voting.endsAt) <= Date.now();
+      const pct = voting.totalVoters > 0 ? Math.round((voting.votesCast / voting.totalVoters) * 100) : 0;
+      const leaders = voting.currentLeaders || [];
+      const nonVoters = voting.nonVoters || [];
+
+      let leaderNote = '';
+      if (leaders.length === 1) {
+        const leaderPlayer = data.players.find((p) => p.id === leaders[0]);
+        leaderNote = `<div class="voting-leader-note"><i class="fa-solid fa-triangle-exclamation"></i> ${t('voting_leader_note', { name: leaderPlayer ? escapeHtml(leaderPlayer.name) : '', votes: voting.tally[leaders[0]] || 0 })}</div>`;
+      } else if (leaders.length > 1) {
+        leaderNote = `<div class="voting-leader-note is-tie"><i class="fa-solid fa-scale-balanced"></i> ${t('voting_leader_tie_note')}</div>`;
+      } else {
+        leaderNote = `<div class="voting-leader-note is-empty">${t('voting_no_votes_note')}</div>`;
+      }
+
+      const waitingNote = (!canFinalizeNow && nonVoters.length > 0)
+        ? `<div class="voting-waiting-note"><i class="fa-solid fa-hourglass-half"></i> ${t('voting_waiting_for', { names: nonVoters.map((n) => escapeHtml(n.name)).join(', ') })}</div>`
+        : (voting.votesCast >= voting.totalVoters && voting.totalVoters > 0
+            ? `<div class="voting-waiting-note is-complete"><i class="fa-solid fa-circle-check"></i> ${t('voting_all_voted')}</div>`
+            : '');
+
+      const myHint = meExcluded ? '' : (voting.myVoteTargetId
+        ? `<p class="setup-hint voting-my-hint">${t('voting_you_voted_hint')}</p>`
+        : `<p class="setup-hint voting-my-hint">${t('voting_vote_now_hint')}</p>`);
+
       return `
         <div class="voting-header">
           <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_round_title', { round: voting.round })}</div>
           <div class="timer-pill voting"><span data-ends-at="${voting.endsAt}">--:--</span></div>
         </div>
-        <div class="voting-progress-note">${t('votes_cast', { cast: voting.votesCast, total: voting.totalVoters })}</div>
+        <div class="voting-progress-wrap">
+          <div class="voting-progress-note">
+            <span>${t('voting_progress_label')}</span>
+            <span>${t('votes_cast', { cast: voting.votesCast, total: voting.totalVoters })}</span>
+          </div>
+          <div class="voting-progress-bar"><div class="voting-progress-fill" style="width:${pct}%;"></div></div>
+        </div>
+        ${leaderNote}
+        ${waitingNote}
+        ${myHint}
         <div class="voting-list">
           ${alivePlayers.map((p) => {
             const votes = voting.tally[p.id] || 0;
             const isTarget = voting.myVoteTargetId === p.id;
+            const isLeader = leaders.length === 1 && leaders[0] === p.id;
+            const hasVoted = !nonVoters.some((n) => n.id === p.id);
             return `
-              <div class="voting-row">
-                <div class="voting-name"><i class="fa-solid fa-user"></i> ${escapeHtml(p.name)}${p.isMe ? ` <span class="me-badge">${t('seat_me_badge')}</span>` : ''}</div>
+              <div class="voting-row ${isLeader ? 'is-leader' : ''} ${isTarget ? 'is-my-target' : ''}">
+                <div class="voting-name">
+                  <i class="fa-solid fa-user"></i> ${escapeHtml(p.name)}
+                  ${p.isMe ? ` <span class="me-badge">${t('seat_me_badge')}</span>` : ''}
+                  ${hasVoted ? `<i class="fa-solid fa-check voting-cast-check" title="${t('voting_progress_label')}"></i>` : ''}
+                </div>
                 <div class="voting-controls">
-                  <span class="vote-count">${votes}</span>
-                  ${(!p.isMe && !meExcluded) ? `<button class="vote-btn-small ${isTarget ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}" title="${t('vote_against')}"><i class="fa-solid fa-hand-point-right"></i></button>` : ''}
+                  <span class="vote-count ${isLeader ? 'is-leader' : ''}">${votes}</span>
+                  ${(!p.isMe && !meExcluded) ? `<button class="vote-btn-small ${isTarget ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}" title="${isTarget ? t('vote_change') : t('vote_against')}"><i class="fa-solid fa-hand-point-right"></i></button>` : ''}
                 </div>
               </div>
             `;
           }).join('')}
         </div>
-        <div class="modal-actions" style="margin-top:14px;">
+        <div class="modal-actions voting-actions-row">
+          ${isHost ? `
+            <button class="btn btn-secondary btn-xs" id="vote-cancel-btn">
+              <i class="fa-solid fa-ban"></i> ${t('cancel_vote_btn')}
+            </button>
+          ` : ''}
           <button class="btn btn-danger" id="vote-finalize-btn" ${canFinalizeNow ? '' : `disabled title="${t('finalize_disabled_title')}"`}>
             <i class="fa-solid fa-flag-checkered"></i> ${t('finalize_btn')}
           </button>
@@ -2629,18 +2683,22 @@
     if (voting && voting.status === 'finished' && voting.result) {
       const r = voting.result;
       let resultText = t('voting_result_none');
+      let resultClass = 'none';
       if (r.excludedPlayerId) {
         const target = data.players.find((p) => p.id === r.excludedPlayerId);
         resultText = t('voting_result_excluded', { name: target ? escapeHtml(target.name) : '', votes: r.tally[r.excludedPlayerId] });
+        resultClass = 'excluded';
       } else if (r.tie) {
         resultText = t('voting_result_tie');
+        resultClass = 'tie';
       }
       return `
         <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_result_title', { round: voting.round })}</div>
-        <p class="setup-hint" style="margin:10px 0 16px;">${resultText}</p>
-        ${isHost && votingUnlocked ? `
+        <p class="setup-hint voting-result-note is-${resultClass}" style="margin:10px 0 16px;">${resultText}</p>
+        ${isHost && votingUnlocked && enoughAliveForVote ? `
           <div class="voting-start-row">
-            <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" />
+            <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" inputmode="numeric" />
+            <span class="seconds-label">${t('voting_seconds_suffix')}</span>
             <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_new_vote_btn')}</button>
           </div>
         ` : ''}
@@ -2654,12 +2712,19 @@
       `;
     }
 
+    if (!enoughAliveForVote) {
+      return `
+        <div class="rules-title"><i class="fa-solid fa-lock"></i> ${t('voting_title')}</div>
+        <p class="setup-hint">${t('voting_locked_players_hint')}</p>
+      `;
+    }
+
     return `
       <div class="rules-title"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_title')}</div>
       ${isHost ? `
         <p class="setup-hint" style="margin-bottom:12px;">${t('voting_host_hint')}</p>
         <div class="voting-start-row">
-          <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" />
+          <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" inputmode="numeric" />
           <span class="seconds-label">${t('voting_seconds_suffix')}</span>
           <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_start_btn')}</button>
         </div>
@@ -2827,12 +2892,41 @@
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
     }
+    const cancelBtn = e.target.closest('#vote-cancel-btn');
+    if (cancelBtn) {
+      handleCancelVoteConfirm();
+      return;
+    }
     const voteBtn = e.target.closest('[data-action="vote"]');
     if (voteBtn) {
       const targetId = Number(voteBtn.dataset.targetId);
       try { await api('post', `/${session.code}/vote/cast`, { targetPlayerId: targetId }); playSfx('vote'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
     }
+  }
+
+  function handleCancelVoteConfirm() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="panel modal-box">
+        <i class="fa-solid fa-ban modal-icon" style="color:var(--danger);"></i>
+        <h3>${t('cancel_vote_confirm_title')}</h3>
+        <p>${t('cancel_vote_confirm_desc')}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel-btn">${t('btn_cancel')}</button>
+          <button class="btn btn-danger" id="modal-confirm-btn"><i class="fa-solid fa-ban"></i> ${t('cancel_vote_btn')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => overlay.remove());
+    document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
+      overlay.remove();
+      try { await api('post', `/${session.code}/vote/cancel`, {}); await pollOnce(); }
+      catch (e) { showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation'); }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
   function handleResetGameConfirm() {

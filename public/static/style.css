@@ -992,6 +992,31 @@ input[type="range"]::-moz-range-thumb {
   opacity: 0.55;
 }
 
+.player-card.vote-leader {
+  border-color: var(--warning);
+  box-shadow: 0 0 0 1px rgba(230,168,23,0.3) inset, 0 10px 26px rgba(0,0,0,0.5);
+}
+
+.card-vote-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 20px;
+  padding: 4px 9px;
+  flex-shrink: 0;
+}
+.card-vote-badge.is-leader {
+  color: var(--warning);
+  border-color: var(--warning);
+  background: rgba(230,168,23,0.1);
+}
+
 .player-card.excluded::after {
   content: 'ИСКЛЮЧЁН';
   position: absolute;
@@ -1477,7 +1502,68 @@ input[type="range"]::-moz-range-thumb {
   .catastrophe-title { font-size: 24px; }
   .catastrophe-card { padding: 30px 20px; }
   .game-topbar { padding: 12px 14px; }
-  .players-grid { grid-template-columns: 1fr; }
+  .players-grid { grid-template-columns: 1fr; gap: 14px; padding: 0 10px; }
+
+  /* --- Карточка игрока: увеличенные тап-зоны и более компактная вёрстка --- */
+  .player-card-head { padding: 12px 12px; gap: 10px; }
+  .player-avatar { width: 38px; height: 38px; font-size: 15px; }
+  .player-name-static { font-size: 15px; gap: 6px; }
+
+  .card-vote-badge { padding: 5px 10px; font-size: 12.5px; }
+
+  .icon-toggle {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+
+  .player-profession-strip { padding: 10px 12px; gap: 8px; }
+  .player-profession-strip .prof-text { font-size: 14px; }
+
+  .attributes-list { padding: 8px 10px 12px; gap: 6px; }
+
+  /* Тап-зона всей строки увеличена под палец, без изменения визуального размера текста */
+  .attr-row-head { padding: 12px 10px; min-height: 44px; }
+  .attr-row-head .attr-label { font-size: 11.5px; gap: 8px; }
+
+  .attr-reroll {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+
+  .attr-value { padding: 0 10px; font-size: 13px; }
+  .attr-row.revealed .attr-value,
+  .attr-row.mine.hidden-state .attr-value { padding: 0 10px 12px; }
+
+  .vote-target-btn {
+    width: calc(100% - 20px);
+    margin: 4px 10px 12px;
+    padding: 13px 10px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  /* --- Сайдбар/голосование на мобильных --- */
+  .side-panel .panel { padding: 16px 14px 14px; }
+
+  .voting-row { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .voting-name { font-size: 13px; }
+
+  .vote-btn-small {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+
+  .voting-actions-row { flex-direction: column-reverse; }
+  .voting-actions-row .btn { width: 100%; justify-content: center; }
+
+  .voting-start-row { flex-direction: column; align-items: stretch; }
+  .voting-start-row .seconds-input { width: 100%; }
+  .voting-start-row .btn { width: 100%; justify-content: center; }
+
+  .timer-pill { font-size: 12px; padding: 6px 12px; }
 }
 
 /* =====================================================================
@@ -1887,15 +1973,97 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 10px;
 }
 
+.voting-progress-wrap { margin-bottom: 12px; }
+
 .voting-progress-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.voting-progress-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  overflow: hidden;
+}
+
+.voting-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--rust), var(--rust-light));
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.voting-leader-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--warning);
+  background: rgba(230, 168, 23, 0.08);
+  border: 1px solid rgba(230, 168, 23, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.voting-leader-note.is-tie { color: var(--text-dim); background: var(--bg-panel-2); border-color: var(--border-metal); }
+.voting-leader-note.is-empty { color: var(--text-faint); background: var(--bg-panel-2); border-color: var(--border-metal); font-size: 12px; padding: 7px 12px; }
+
+.voting-waiting-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-faint);
   margin-bottom: 10px;
+  line-height: 1.5;
 }
+.voting-waiting-note.is-complete { color: var(--toxic); }
+
+.voting-my-hint {
+  font-size: 12px;
+  margin: 0 0 10px !important;
+  color: var(--text-dim);
+}
+
+.voting-actions-row {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.voting-actions-row .btn-danger { flex: 1; justify-content: center; }
+
+.voting-result-note.is-excluded { color: var(--danger-light); }
+.voting-result-note.is-tie { color: var(--warning); }
 
 .voting-card .voting-list {
   max-height: 320px;
 }
+
+.voting-row.is-leader {
+  border-color: rgba(230, 168, 23, 0.5);
+  background: linear-gradient(135deg, rgba(230, 168, 23, 0.08), var(--bg-panel-2));
+}
+
+.voting-row.is-my-target {
+  border-color: var(--danger);
+}
+
+.voting-cast-check {
+  color: var(--toxic);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.vote-count.is-leader { color: var(--warning); font-weight: 700; }
 
 .vote-btn-small {
   width: 26px;
