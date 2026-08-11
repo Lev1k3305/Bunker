@@ -656,7 +656,7 @@ rooms.post('/:code/vote/start', async (c) => {
   const code = c.req.param('code').toUpperCase();
   const token = c.req.header('X-Player-Token') || '';
   const body = await c.req.json().catch(() => ({}));
-  const seconds = Math.min(Math.max(Number(body?.seconds) || VOTING_SECONDS_DEFAULT, 15), 900);
+  const seconds = Math.min(Math.max(Number(body?.seconds) || VOTING_SECONDS_DEFAULT, 15), 3600);
 
   const room = await getRoom(db, code);
   if (!room) return c.json({ error: 'room_not_found' }, 404);

@@ -2697,7 +2697,7 @@
         <p class="setup-hint voting-result-note is-${resultClass}" style="margin:10px 0 16px;">${resultText}</p>
         ${isHost && votingUnlocked && enoughAliveForVote ? `
           <div class="voting-start-row">
-            <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" inputmode="numeric" />
+            <input type="number" id="voting-seconds-input" min="15" max="3600" value="90" class="seconds-input" inputmode="numeric" />
             <span class="seconds-label">${t('voting_seconds_suffix')}</span>
             <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_new_vote_btn')}</button>
           </div>
@@ -2724,7 +2724,7 @@
       ${isHost ? `
         <p class="setup-hint" style="margin-bottom:12px;">${t('voting_host_hint')}</p>
         <div class="voting-start-row">
-          <input type="number" id="voting-seconds-input" min="15" max="900" value="60" class="seconds-input" inputmode="numeric" />
+          <input type="number" id="voting-seconds-input" min="15" max="3600" value="90" class="seconds-input" inputmode="numeric" />
           <span class="seconds-label">${t('voting_seconds_suffix')}</span>
           <button class="btn btn-danger" id="vote-start-btn"><i class="fa-solid fa-square-poll-vertical"></i> ${t('voting_start_btn')}</button>
         </div>
@@ -2881,7 +2881,7 @@
     const startBtn = e.target.closest('#vote-start-btn');
     if (startBtn) {
       const input = document.getElementById('voting-seconds-input');
-      const seconds = Math.min(Math.max(Number(input ? input.value : 60) || 60, 15), 900);
+      const seconds = Math.min(Math.max(Number(input ? input.value : 90) || 90, 15), 3600);
       try { await api('post', `/${session.code}/vote/start`, { seconds }); playSfx('open'); await pollOnce(); }
       catch (err) { showToast(t('toast_error_title'), errorMessageFrom(err), 'fa-triangle-exclamation'); }
       return;
