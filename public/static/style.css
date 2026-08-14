@@ -963,16 +963,44 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.4;
 }
 
-.players-grid {
+/* =====================================================================
+   АРЕНА ИГРОКОВ — "твоя" карточка по центру (крупнее), остальные по
+   бокам двумя колонками. На мобильных превращается в вертикальный
+   список: сначала твоя карточка, затем остальные.
+   ===================================================================== */
+
+.players-arena {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 16px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-  gap: 20px;
+  padding: 4px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
 }
 
-/* Карточка игрока — досье */
+.players-arena-center {
+  flex: 0 0 auto;
+  width: 260px;
+  order: 2;
+}
+
+.players-arena-side {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  max-width: 240px;
+  padding-top: 14px;
+}
+
+.players-arena-side-left { order: 1; align-items: flex-end; }
+.players-arena-side-right { order: 3; align-items: flex-start; }
+.players-arena-side .player-card-flip,
+.players-arena-side .player-card { width: 100%; }
+
+/* Карточка игрока — досье (обёртка внутри флип-контейнера) */
 .player-card {
   border-radius: 12px;
   overflow: hidden;
@@ -980,6 +1008,7 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--border-metal);
   background: linear-gradient(170deg, var(--bg-card), #16140f);
   transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+  height: 100%;
 }
 
 .player-card:hover {
@@ -996,6 +1025,182 @@ input[type="range"]::-moz-range-thumb {
   border-color: var(--warning);
   box-shadow: 0 0 0 1px rgba(230,168,23,0.3) inset, 0 10px 26px rgba(0,0,0,0.5);
 }
+
+/* =====================================================================
+   FLIP-КАРТОЧКА — клик по лицевой стороне (плакат-силуэт) переворачивает
+   карточку и показывает полное досье характеристик на обратной стороне.
+   Состояние переворота хранится в JS (flippedCardIds) и переживает
+   поллинг, поэтому карточка не "захлопывается" сама на фоновом обновлении.
+   ===================================================================== */
+
+.player-card-flip {
+  perspective: 1400px;
+  min-height: 360px;
+}
+.players-arena-center .player-card-flip { min-height: 420px; }
+
+.player-card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-style: preserve-3d;
+}
+.players-arena-center .player-card-flip-inner { min-height: 420px; }
+
+.player-card-flip.is-flipped .player-card-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.player-card-flip .player-card-face,
+.player-card-flip .player-card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.player-card-flip .player-card-back {
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* --- Лицевая сторона: тёмный плакат-силуэт, вдохновлённый ролевыми карточками --- */
+.player-card-face {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  background:
+    radial-gradient(ellipse at 50% 22%, rgba(184,70,14,0.10), transparent 60%),
+    linear-gradient(180deg, #100f0d 0%, #17150f 55%, #1c1a17 100%);
+  padding: 18px 14px 20px;
+  user-select: none;
+}
+
+.card-face-silhouette {
+  position: absolute;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 64px;
+  color: rgba(232, 226, 214, 0.14);
+  text-shadow: 0 0 30px rgba(184, 70, 14, 0.12);
+}
+.players-arena-center .card-face-silhouette { font-size: 78px; }
+
+.player-card-face.vote-leader .card-face-silhouette { color: rgba(230, 168, 23, 0.28); }
+.player-card-flip.excluded .player-card-face .card-face-silhouette { color: rgba(198, 43, 43, 0.35); }
+
+.card-face-you-tag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--toxic-dark);
+  color: #fff;
+  font-family: var(--font-head);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  padding: 3px 9px;
+  border-radius: 10px;
+}
+
+.card-face-host-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--warning);
+  font-size: 15px;
+  filter: drop-shadow(0 0 6px rgba(230,168,23,0.5));
+}
+
+.card-face-excluded-tag {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  border: 3px solid var(--danger);
+  color: var(--danger);
+  font-family: var(--font-head);
+  font-size: 20px;
+  letter-spacing: 3px;
+  padding: 5px 16px;
+  border-radius: 6px;
+  background: rgba(10,9,8,0.6);
+  pointer-events: none;
+}
+
+.card-face-body {
+  position: relative;
+  width: 100%;
+  text-align: center;
+  z-index: 1;
+}
+
+.card-face-name {
+  font-family: var(--font-head);
+  font-size: 17px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.card-face-profession {
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--rust-light);
+  margin-bottom: 12px;
+  min-height: 14px;
+}
+
+.card-face-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.card-face-dot {
+  width: 9px;
+  height: 15px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.09);
+  border: 1px solid var(--border-metal);
+}
+.card-face-dot.lit {
+  background: var(--rust-light);
+  border-color: var(--rust-light);
+  box-shadow: 0 0 6px rgba(232, 99, 31, 0.5);
+}
+.player-card-flip.excluded .card-face-dot.lit { background: var(--danger); border-color: var(--danger); box-shadow: 0 0 6px rgba(198,43,43,0.5); }
+
+.card-face-hint {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.card-revealed-progress {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  padding: 8px 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-revealed-progress i { color: var(--rust-light); }
 
 .card-vote-badge {
   display: flex;
@@ -1502,7 +1707,17 @@ input[type="range"]::-moz-range-thumb {
   .catastrophe-title { font-size: 24px; }
   .catastrophe-card { padding: 30px 20px; }
   .game-topbar { padding: 12px 14px; }
-  .players-grid { grid-template-columns: 1fr; gap: 14px; padding: 0 10px; }
+
+  /* --- Арена игроков на мобильных: вертикальный список, твоя карточка первой --- */
+  .players-arena { flex-direction: column; align-items: stretch; padding: 4px 10px; gap: 14px; }
+  .players-arena-center { width: 100%; order: -1; }
+  .players-arena-side { max-width: none; width: 100%; flex-direction: column; align-items: stretch; padding-top: 0; }
+  .players-arena-side-left { order: 0; }
+  .players-arena-side-right { order: 1; }
+  .player-card-flip { min-height: 320px; }
+  .players-arena-center .player-card-flip { min-height: 340px; }
+  .player-card-flip-inner,
+  .players-arena-center .player-card-flip-inner { min-height: inherit; }
 
   /* --- Карточка игрока: увеличенные тап-зоны и более компактная вёрстка --- */
   .player-card-head { padding: 12px 12px; gap: 10px; }
@@ -1628,7 +1843,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 14px;
   overflow: hidden;
 }
-.players-grid-wrap .players-grid { position: relative; z-index: 1; }
+.players-grid-wrap .players-arena { position: relative; z-index: 1; }
 
 .room-code-input {
   width: 100%;
@@ -2528,7 +2743,7 @@ input[type="range"]::-moz-range-thumb {
    by app.js, so the CSS rule stays generic.
    ===================================================================== */
 
-.players-grid.stagger-in .player-card {
+.players-arena.stagger-in .player-card-flip {
   animation: card-in-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--stg, 0ms);
 }

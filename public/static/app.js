@@ -245,6 +245,11 @@
       reroll_title: 'Перебросить, пока скрыто от других',
       voted_for_badge: 'Голосует за меня',
       votes_received: '{count} голос.',
+      card_flip_hint: 'Нажмите, чтобы посмотреть досье',
+      card_flip_back_title: 'Свернуть карточку',
+      card_revealed_count: 'Раскрыто {revealed} из {total} характеристик',
+      card_you_label: 'ТЫ',
+      card_excluded_label: 'ИСКЛЮЧЁН',
 
       // Голосование
       voting_round_title: 'Голосование — раунд {round}',
@@ -497,6 +502,11 @@
       reroll_title: 'Reroll while hidden from others',
       voted_for_badge: 'Voting for me',
       votes_received: '{count} votes',
+      card_flip_hint: 'Tap to see the dossier',
+      card_flip_back_title: 'Flip card back',
+      card_revealed_count: '{revealed} of {total} attributes revealed',
+      card_you_label: 'YOU',
+      card_excluded_label: 'EXCLUDED',
 
       voting_round_title: 'Voting — round {round}',
       votes_cast: 'Votes cast: {cast} / {total}',
@@ -1389,6 +1399,7 @@
   let lastKnownStatus = null;
   let autoFinalizeInFlight = false;
   let lastSeenChatCount = -1; // -1 = ещё не рендерили чат в этой сессии (не проигрывать анимацию на всю историю)
+  let flippedCardIds = new Set(); // id карточек игроков, развёрнутых лицом с характеристиками (переживает поллинг)
 
   const appEl = document.getElementById('app');
   let toastContainer = null;
@@ -2434,9 +2445,7 @@
         <div class="main-columns">
           <div class="players-grid-wrap bunker-scene-panel">
             ${sceneBackdropHtml('bunker')}
-            <div class="players-grid" id="players-grid">
-              ${players.filter((p) => p.claimed).map((p) => renderPlayerCardMp(p, { isHost, room, data })).join('')}
-            </div>
+            ${renderPlayersArenaHtml(data, isHost)}
           </div>
           <aside class="side-panel">
             <div class="panel voting-card" id="voting-card">${renderVotingCardHtml(data, isHost)}</div>
@@ -2520,6 +2529,31 @@
     if (leaveBtn) leaveBtn.addEventListener('click', handleLeaveToHome);
   }
 
+  // Роли-иконки для лицевой стороны карточки (силуэт-плакат в духе референса);
+  // подбирается детерминированно по id игрока, чтобы не "прыгала" между поллингами.
+  const CARD_FACE_ICONS = ['fa-flask', 'fa-user-doctor', 'fa-gear', 'fa-crosshairs', 'fa-microscope', 'fa-hammer', 'fa-shield-halved', 'fa-book'];
+
+  function renderPlayersArenaHtml(data, isHost) {
+    const players = (data.players || []).filter((p) => p.claimed);
+    const me = players.find((p) => p.isMe);
+    const others = players.filter((p) => !p.isMe);
+    const ctx = { isHost, room: data.room, data };
+
+    // "Я" — по центру (или первым на мобильных, где раскладка становится списком),
+    // остальные — по бокам в порядке слотов.
+    const orderedIds = players.map((p) => p.id).join(',');
+
+    return `
+      <div class="players-arena" id="players-grid" data-order="${orderedIds}">
+        ${others.length ? `<div class="players-arena-side players-arena-side-left">${others.filter((_, i) => i % 2 === 0).map((p) => renderPlayerCardMp(p, ctx)).join('')}</div>` : ''}
+        <div class="players-arena-center">
+          ${me ? renderPlayerCardMp(me, ctx) : ''}
+        </div>
+        ${others.length ? `<div class="players-arena-side players-arena-side-right">${others.filter((_, i) => i % 2 === 1).map((p) => renderPlayerCardMp(p, ctx)).join('')}</div>` : ''}
+      </div>
+    `;
+  }
+
   function renderPlayerCardMp(p, ctx) {
     const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
     const isHostSeat = ctx.room.hostPlayerId === p.id;
@@ -2532,40 +2566,74 @@
     const voteCount = votingActive ? (voting.tally[p.id] || 0) : 0;
     const isVoteLeader = votingActive && voting.currentLeaders && voting.currentLeaders.length === 1 && voting.currentLeaders[0] === p.id && voteCount > 0;
     const iAmVotingForThem = canVoteFor && myVoteTargetId === p.id;
+    const isFlipped = flippedCardIds.has(p.id);
+    const revealedCount = ATTR_FIELDS.filter((f) => p.revealed && p.revealed[f.key]).length;
+    const faceIcon = p.excluded ? 'fa-skull' : CARD_FACE_ICONS[p.id % CARD_FACE_ICONS.length];
 
     return `
-      <div class="player-card ${p.excluded ? 'excluded' : ''} ${isMe ? 'is-me' : ''} ${isVoteLeader ? 'vote-leader' : ''}" id="card-${p.id}">
-        <div class="player-card-head">
-          <div class="player-avatar">${initial}</div>
-          <div class="player-name-static">
-            ${escapeHtml(p.name)}
-            ${isMe ? `<span class="me-badge">${t('seat_me_badge')}</span>` : ''}
-            ${isHostSeat ? `<span class="host-badge" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></span>` : ''}
-          </div>
-          ${votingActive ? `
-            <div class="card-vote-badge ${isVoteLeader ? 'is-leader' : ''}" title="${t('votes_received', { count: voteCount })}">
-              <i class="fa-solid fa-square-poll-vertical"></i>${voteCount}
+      <div class="player-card-flip ${isMe ? 'is-me' : ''} ${p.excluded ? 'excluded' : ''} ${isFlipped ? 'is-flipped' : ''}" id="card-${p.id}" data-player-id="${p.id}">
+        <div class="player-card-flip-inner">
+
+          <div class="player-card player-card-face ${isVoteLeader ? 'vote-leader' : ''}" data-action="flip" data-target-id="${p.id}">
+            <div class="card-face-silhouette"><i class="fa-solid ${faceIcon}"></i></div>
+            ${isMe ? `<div class="card-face-you-tag">${t('card_you_label')}</div>` : ''}
+            ${isHostSeat ? `<div class="card-face-host-tag" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></div>` : ''}
+            ${votingActive ? `
+              <div class="card-vote-badge ${isVoteLeader ? 'is-leader' : ''}" title="${t('votes_received', { count: voteCount })}">
+                <i class="fa-solid fa-square-poll-vertical"></i>${voteCount}
+              </div>
+            ` : ''}
+            <div class="card-face-body">
+              <div class="card-face-name">${escapeHtml(p.name)}</div>
+              <div class="card-face-profession">${escapeHtml(tc(p.profession || ''))}</div>
+              <div class="card-face-dots">
+                ${ATTR_FIELDS.map((f) => `<span class="card-face-dot ${p.revealed && p.revealed[f.key] ? 'lit' : ''}"></span>`).join('')}
+              </div>
+              <div class="card-face-hint"><i class="fa-solid fa-hand-pointer"></i> ${t('card_flip_hint')}</div>
             </div>
-          ` : ''}
-          <div class="player-card-actions">
-            ${ctx.isHost ? `<button class="icon-toggle ${p.excluded ? 'active' : ''}" data-action="exclude" data-target-id="${p.id}" title="${t('exclude_toggle_title')}"><i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i></button>` : ''}
+            ${p.excluded ? `<div class="card-face-excluded-tag">${t('card_excluded_label')}</div>` : ''}
           </div>
-        </div>
 
-        <div class="player-profession-strip">
-          <i class="fa-solid fa-briefcase"></i>
-          <div><span class="prof-label">${t('player_profession_label')}</span><span class="prof-text">${escapeHtml(tc(p.profession || ''))}</span></div>
-        </div>
+          <div class="player-card player-card-back ${p.excluded ? 'excluded' : ''} ${isMe ? 'is-me' : ''} ${isVoteLeader ? 'vote-leader' : ''}">
+            <div class="player-card-head">
+              <div class="player-avatar">${initial}</div>
+              <div class="player-name-static">
+                ${escapeHtml(p.name)}
+                ${isMe ? `<span class="me-badge">${t('seat_me_badge')}</span>` : ''}
+                ${isHostSeat ? `<span class="host-badge" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></span>` : ''}
+              </div>
+              ${votingActive ? `
+                <div class="card-vote-badge ${isVoteLeader ? 'is-leader' : ''}" title="${t('votes_received', { count: voteCount })}">
+                  <i class="fa-solid fa-square-poll-vertical"></i>${voteCount}
+                </div>
+              ` : ''}
+              <div class="player-card-actions">
+                <button class="icon-toggle" data-action="flip" data-target-id="${p.id}" title="${t('card_flip_back_title')}"><i class="fa-solid fa-rotate-left"></i></button>
+                ${ctx.isHost ? `<button class="icon-toggle ${p.excluded ? 'active' : ''}" data-action="exclude" data-target-id="${p.id}" title="${t('exclude_toggle_title')}"><i class="fa-solid ${p.excluded ? 'fa-user-check' : 'fa-user-slash'}"></i></button>` : ''}
+              </div>
+            </div>
 
-        <div class="attributes-list">
-          ${ATTR_FIELDS.map((f) => renderAttrRowMp(p, f, isMe)).join('')}
-        </div>
+            <div class="player-profession-strip">
+              <i class="fa-solid fa-briefcase"></i>
+              <div><span class="prof-label">${t('player_profession_label')}</span><span class="prof-text">${escapeHtml(tc(p.profession || ''))}</span></div>
+            </div>
 
-        ${canVoteFor ? `
-          <button class="vote-target-btn ${iAmVotingForThem ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}">
-            <i class="fa-solid fa-square-poll-vertical"></i> ${iAmVotingForThem ? t('vote_own') : t('vote_against')}
-          </button>
-        ` : ''}
+            <div class="card-revealed-progress">
+              <i class="fa-solid fa-list-check"></i> ${t('card_revealed_count', { revealed: revealedCount, total: ATTR_FIELDS.length })}
+            </div>
+
+            <div class="attributes-list">
+              ${ATTR_FIELDS.map((f) => renderAttrRowMp(p, f, isMe)).join('')}
+            </div>
+
+            ${canVoteFor ? `
+              <button class="vote-target-btn ${iAmVotingForThem ? 'chosen' : ''}" data-action="vote" data-target-id="${p.id}">
+                <i class="fa-solid fa-square-poll-vertical"></i> ${iAmVotingForThem ? t('vote_own') : t('vote_against')}
+              </button>
+            ` : ''}
+          </div>
+
+        </div>
       </div>
     `;
   }
@@ -2847,6 +2915,16 @@
   }
 
   async function onPlayersGridClick(e) {
+    const flipBtn = e.target.closest('[data-action="flip"]');
+    if (flipBtn) {
+      const targetId = Number(flipBtn.dataset.targetId);
+      const card = document.getElementById(`card-${targetId}`);
+      const isNowFlipped = flippedCardIds.has(targetId);
+      if (isNowFlipped) { flippedCardIds.delete(targetId); } else { flippedCardIds.add(targetId); }
+      if (card) card.classList.toggle('is-flipped', !isNowFlipped);
+      playSfx('click');
+      return;
+    }
     const rerollBtn = e.target.closest('[data-action="reroll"]');
     if (rerollBtn) {
       e.stopPropagation();
