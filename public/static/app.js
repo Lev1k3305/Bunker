@@ -1298,7 +1298,7 @@
 
   function attachGlobalRipple() {
     document.addEventListener('click', (e) => {
-      const target = e.target.closest('.btn, .icon-toggle, .attr-reroll, .vote-btn-small, .vote-target-btn, .mp-tab, .seat-cell.empty');
+      const target = e.target.closest('.btn, .icon-toggle, .attr-reroll, .vote-btn-small, .vote-target-btn, .mp-tab, .seat-cell.empty, .player-card-face');
       if (!target || target.disabled) return;
       const rect = target.getBoundingClientRect();
       const size = Math.max(rect.width, rect.height) * 1.4;
@@ -1663,7 +1663,7 @@
         const grid = document.getElementById('players-grid');
         if (grid) {
           grid.classList.add('stagger-in');
-          Array.from(grid.children).forEach((card, i) => {
+          Array.from(grid.querySelectorAll('.player-card-flip')).forEach((card, i) => {
             card.style.setProperty('--stg', (i * 70) + 'ms');
           });
         }
