@@ -77,6 +77,9 @@
 
       // Лендинг
       landing_subtitle: 'сетевая игра на выживание — каждый со своего устройства',
+      landing_badge_players: '4–16 игроков',
+      landing_badge_devices: 'Свой телефон или ПК',
+      landing_badge_fast: 'Старт за минуту',
       btn_play: 'Играть',
       btn_howto: 'Как начать игру',
       btn_settings: 'Настройки',
@@ -344,6 +347,9 @@
       game_hint_close_title: 'Hide this hint',
 
       landing_subtitle: 'an online survival game — everyone joins from their own device',
+      landing_badge_players: '4–16 players',
+      landing_badge_devices: 'Any phone or PC',
+      landing_badge_fast: 'Start in a minute',
       btn_play: 'Play',
       btn_howto: 'How to start',
       btn_settings: 'Settings',
@@ -1814,19 +1820,33 @@
   function renderLandingScreen() {
     currentView = 'home';
     appEl.innerHTML = `
-      <div class="screen mp-home-screen view-enter">
-        <div class="container">
-          <div class="top-title">
+      <div class="screen mp-home-screen landing-screen view-enter">
+        ${sceneBackdropHtml('bunker')}
+        <div class="container landing-container">
+          <div class="landing-emblem">
+            <div class="landing-emblem-ring"></div>
+            <div class="landing-emblem-ring landing-emblem-ring-2"></div>
             <i class="fa-solid fa-radiation"></i>
+          </div>
+
+          <div class="top-title">
             <h1>SHELTER</h1>
           </div>
           <div class="subtitle">${t('landing_subtitle')}</div>
 
+          <div class="landing-badges">
+            <div class="landing-badge"><i class="fa-solid fa-users"></i> ${t('landing_badge_players')}</div>
+            <div class="landing-badge"><i class="fa-solid fa-mobile-screen-button"></i> ${t('landing_badge_devices')}</div>
+            <div class="landing-badge"><i class="fa-solid fa-bolt"></i> ${t('landing_badge_fast')}</div>
+          </div>
+
           <div class="landing-actions landing-actions-center">
-            <button class="btn btn-primary btn-lg" id="landing-play-btn"><i class="fa-solid fa-play"></i> ${t('btn_play')}</button>
-            <button class="btn btn-secondary" id="landing-howto-btn"><i class="fa-solid fa-circle-question"></i> ${t('btn_howto')}</button>
-            <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> ${t('btn_settings')}</button>
-            <button class="btn btn-secondary" id="landing-support-btn"><i class="fa-brands fa-telegram"></i> ${t('btn_telegram')}</button>
+            <button class="btn btn-primary btn-lg btn-shine" id="landing-play-btn"><i class="fa-solid fa-play"></i> ${t('btn_play')}</button>
+            <div class="landing-actions-row">
+              <button class="btn btn-secondary" id="landing-howto-btn"><i class="fa-solid fa-circle-question"></i> ${t('btn_howto')}</button>
+              <button class="btn btn-secondary" id="landing-settings-btn"><i class="fa-solid fa-gear"></i> ${t('btn_settings')}</button>
+            </div>
+            <button class="btn btn-ghost landing-telegram-btn" id="landing-support-btn"><i class="fa-brands fa-telegram"></i> ${t('btn_telegram')}</button>
           </div>
 
           <div class="app-footer">${t('footer_copyright')}</div>

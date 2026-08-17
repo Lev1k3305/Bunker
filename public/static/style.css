@@ -1791,6 +1791,152 @@ input[type="range"]::-moz-range-thumb {
   justify-content: center;
 }
 
+/* =====================================================================
+   LANDING SCREEN — привлекательный главный экран
+   ===================================================================== */
+
+.landing-screen {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-screen > *:not(.scene-backdrop) { position: relative; z-index: 1; }
+
+.landing-container {
+  text-align: center;
+}
+
+.landing-emblem {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  margin: 0 auto 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-emblem i {
+  font-size: 44px;
+  color: var(--rust-light);
+  filter: drop-shadow(0 0 18px rgba(184, 70, 14, 0.65));
+  animation: pulse-glow 3.2s ease-in-out infinite;
+}
+
+.landing-emblem-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-rust);
+  opacity: 0.65;
+}
+
+.landing-emblem-ring::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border-top: 2px solid var(--rust-light);
+  border-right: 2px solid transparent;
+  animation: ring-spin 5s linear infinite;
+}
+
+.landing-emblem-ring-2 {
+  inset: -16px;
+  opacity: 0.35;
+  border-style: dashed;
+}
+
+.landing-emblem-ring-2::before {
+  border-top-color: var(--toxic);
+  animation-duration: 9s;
+  animation-direction: reverse;
+}
+
+.landing-screen .top-title {
+  margin-bottom: 6px;
+}
+
+.landing-screen .subtitle {
+  margin-bottom: 26px;
+}
+
+.landing-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 34px;
+}
+
+.landing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.landing-badge i { color: var(--rust-light); font-size: 12px; }
+
+.landing-badge:hover {
+  border-color: var(--rust);
+  color: var(--text-main);
+  transform: translateY(-2px);
+}
+
+.landing-actions-row {
+  display: flex;
+  gap: 12px;
+}
+
+.landing-actions-row .btn { flex: 1; }
+
+.landing-telegram-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 12px 20px;
+  font-size: 12px;
+}
+
+/* Лёгкий блик, пробегающий по главной кнопке "Играть" раз в несколько секунд —
+   безопасно на лендинге, т.к. этот экран не участвует в поллинге и не мигает. */
+.btn-shine {
+  position: relative;
+}
+
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-20deg);
+  animation: btn-shine-sweep 3.5s ease-in-out infinite;
+}
+
+@keyframes btn-shine-sweep {
+  0% { left: -60%; }
+  35% { left: 130%; }
+  100% { left: 130%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-emblem i,
+  .landing-emblem-ring::before,
+  .btn-shine::after {
+    animation: none;
+  }
+}
+
 .mp-tabs {
   display: flex;
   justify-content: center;
@@ -2548,6 +2694,11 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 640px) {
   .landing-actions .btn-lg { font-size: 15px; padding: 15px 20px; }
   .play-panel { padding: 26px 20px; }
+  .landing-emblem { width: 84px; height: 84px; margin-bottom: 16px; }
+  .landing-emblem i { font-size: 34px; }
+  .landing-badges { gap: 8px; margin-bottom: 26px; }
+  .landing-badge { padding: 7px 12px; font-size: 11px; }
+  .landing-actions-row { flex-direction: column; }
 }
 
 /* --- Настройки: секции --- */
