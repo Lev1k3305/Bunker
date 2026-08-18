@@ -1806,6 +1806,23 @@ input[type="range"]::-moz-range-thumb {
   text-align: center;
 }
 
+/* --- Плавное каскадное появление элементов лендинга ---------------------
+   Экран не участвует в поллинге состояния комнаты (рендерится один раз при
+   переходе), поэтому можно безопасно проигрывать многоступенчатую анимацию
+   входа без риска "мигания" при фоновых обновлениях. Кривые переиспользуют
+   уже принятый в проекте язык движения: expo-out (0.22,1,0.36,1) для
+   плавного появления и bounce (0.34,1.56,0.64,1) для акцентных элементов. */
+
+@keyframes landing-rise-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes landing-pop-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .landing-emblem {
   position: relative;
   width: 108px;
@@ -1814,6 +1831,30 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation:
+    landing-pop-in 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    emblem-breathe 4.5s ease-in-out 0.75s infinite;
+}
+
+/* Мягкая дышащая аура позади эмблемы — добавляет глубины без резких переходов */
+.landing-emblem::before {
+  content: '';
+  position: absolute;
+  inset: -30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 99, 31, 0.35), transparent 70%);
+  filter: blur(6px);
+  animation: halo-pulse 4.5s ease-in-out 0.75s infinite;
+}
+
+@keyframes emblem-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes halo-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.15); }
 }
 
 .landing-emblem i {
@@ -1855,10 +1896,12 @@ input[type="range"]::-moz-range-thumb {
 
 .landing-screen .top-title {
   margin-bottom: 6px;
+  animation: landing-rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
 }
 
 .landing-screen .subtitle {
   margin-bottom: 26px;
+  animation: landing-rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
 }
 
 .landing-badges {
@@ -1880,15 +1923,33 @@ input[type="range"]::-moz-range-thumb {
   font-size: 12px;
   letter-spacing: 0.5px;
   color: var(--text-dim);
-  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  animation: landing-rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.landing-badge i { color: var(--rust-light); font-size: 12px; }
+.landing-badge:nth-child(1) { animation-delay: 0.34s; }
+.landing-badge:nth-child(2) { animation-delay: 0.42s; }
+.landing-badge:nth-child(3) { animation-delay: 0.5s; }
+
+.landing-badge i {
+  color: var(--rust-light);
+  font-size: 12px;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 .landing-badge:hover {
   border-color: var(--rust);
   color: var(--text-main);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+}
+
+.landing-badge:hover i { transform: scale(1.25) rotate(-8deg); }
+
+.landing-actions { animation: landing-rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both; }
+
+.landing-actions .btn-shine {
+  animation: landing-pop-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.62s both;
 }
 
 .landing-actions-row {
@@ -1905,8 +1966,14 @@ input[type="range"]::-moz-range-thumb {
   font-size: 12px;
 }
 
-/* Лёгкий блик, пробегающий по главной кнопке "Играть" раз в несколько секунд —
-   безопасно на лендинге, т.к. этот экран не участвует в поллинге и не мигает. */
+.landing-screen .app-footer {
+  animation: landing-rise-in 0.6s ease 0.85s both;
+}
+
+/* Лёгкий блик, пробегающий по главной кнопке "Играть" — стартует уже после
+   того, как кнопка "влетела" на экран, и повторяется реже, чтобы оставаться
+   приятным акцентом, а не навязчивым мерцанием. Безопасно на лендинге,
+   т.к. этот экран не участвует в поллинге и не перерисовывается фоном. */
 .btn-shine {
   position: relative;
 }
@@ -1916,23 +1983,61 @@ input[type="range"]::-moz-range-thumb {
   position: absolute;
   top: 0;
   left: -60%;
-  width: 40%;
+  width: 35%;
   height: 100%;
-  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.35), transparent);
+  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.4), transparent);
   transform: skewX(-20deg);
-  animation: btn-shine-sweep 3.5s ease-in-out infinite;
+  animation: btn-shine-sweep 5s cubic-bezier(0.65, 0, 0.35, 1) 1.3s infinite;
 }
 
 @keyframes btn-shine-sweep {
   0% { left: -60%; }
-  35% { left: 130%; }
+  28% { left: 130%; }
   100% { left: 130%; }
 }
 
+/* Мягкое дыхание фонового свечения/точек сцены — только на лендинге,
+   на экранах катастрофы/победы тот же backdrop переиспользуется, но там
+   он не должен получать бесконечные анимации (перерисовывается поллингом). */
+.landing-screen .scene-glow {
+  animation: halo-pulse-slow 6s ease-in-out infinite;
+}
+
+.landing-screen .scene-dot {
+  animation: dot-float 6s ease-in-out infinite;
+}
+
+.landing-screen .scene-dot:nth-child(3) { animation-duration: 5.5s; animation-delay: -1s; }
+.landing-screen .scene-dot:nth-child(4) { animation-duration: 7s; animation-delay: -3s; }
+.landing-screen .scene-dot:nth-child(5) { animation-duration: 6.5s; animation-delay: -0.5s; }
+.landing-screen .scene-dot:nth-child(6) { animation-duration: 8s; animation-delay: -2s; }
+.landing-screen .scene-dot:nth-child(7) { animation-duration: 5.8s; animation-delay: -4s; }
+.landing-screen .scene-dot:nth-child(8) { animation-duration: 7.4s; animation-delay: -1.5s; }
+
+@keyframes halo-pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.08); }
+}
+
+@keyframes dot-float {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; }
+  50% { transform: translateY(-12px) scale(1.35); opacity: 0.9; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .landing-emblem,
+  .landing-emblem::before,
   .landing-emblem i,
   .landing-emblem-ring::before,
-  .btn-shine::after {
+  .landing-screen .top-title,
+  .landing-screen .subtitle,
+  .landing-badge,
+  .landing-actions,
+  .landing-actions .btn-shine,
+  .landing-screen .app-footer,
+  .btn-shine::after,
+  .landing-screen .scene-glow,
+  .landing-screen .scene-dot {
     animation: none;
   }
 }
