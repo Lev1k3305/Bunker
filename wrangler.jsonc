@@ -12,7 +12,13 @@
       "database_name": "webapp-production",
       "database_id": "local-placeholder-id"
     }
-  ]
+  ],
+  "vars": {
+    // Несекретная настройка модели Groq для ботов. Сам ключ GROQ_API_KEY
+    // хранится ТОЛЬКО как секрет: локально в .dev.vars (не коммитится),
+    // в продакшене — через `wrangler pages secret put GROQ_API_KEY`.
+    "GROQ_MODEL": "openai/gpt-oss-120b"
+  }
   // "vars": {
   //   "MY_VAR": "my-variable"
   // },

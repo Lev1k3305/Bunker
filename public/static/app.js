@@ -178,6 +178,10 @@
       seat_me_badge: 'Ты',
       seat_host_title: 'Хост',
       seat_excluded_title: 'Исключён',
+      seat_bot_title: 'Бот (ИИ)',
+      seat_add_bot_btn: 'Бот',
+      seat_add_bot_title: 'Добавить бота на это место',
+      seat_remove_bot_title: 'Удалить бота',
 
       room_code_label: 'Код комнаты:',
       copy_code_title: 'Скопировать ссылку-приглашение',
@@ -443,6 +447,10 @@
       seat_me_badge: 'You',
       seat_host_title: 'Host',
       seat_excluded_title: 'Excluded',
+      seat_bot_title: 'Bot (AI)',
+      seat_add_bot_btn: 'Bot',
+      seat_add_bot_title: 'Add a bot to this seat',
+      seat_remove_bot_title: 'Remove bot',
 
       room_code_label: 'Room code:',
       copy_code_title: 'Copy invite link',
@@ -2226,22 +2234,25 @@
 
   function seatCellHtml(p, ctx) {
     const isHostSeat = ctx.hostId && p.id === ctx.hostId;
+    const showBotControls = !!ctx.showBotControls; // только хост, только в лобби
     if (!p.claimed) {
       return `<div class="seat-cell empty" data-slot="${p.slot}">
         <span class="seat-light"></span>
         <div class="seat-num">${p.slot}</div>
         <div class="seat-state"><i class="fa-solid fa-user-plus"></i> ${t('seat_free')}</div>
+        ${showBotControls ? `<button class="seat-add-bot-btn" data-slot="${p.slot}" title="${t('seat_add_bot_title')}"><i class="fa-solid fa-robot"></i> ${t('seat_add_bot_btn')}</button>` : ''}
       </div>`;
     }
-    return `<div class="seat-cell taken ${p.isMe ? 'mine' : ''} ${p.excluded ? 'excluded' : ''}" data-slot="${p.slot}">
+    return `<div class="seat-cell taken ${p.isMe ? 'mine' : ''} ${p.excluded ? 'excluded' : ''} ${p.isBot ? 'is-bot' : ''}" data-slot="${p.slot}">
       <span class="seat-light"></span>
       <div class="seat-num">${p.slot}</div>
-      <div class="seat-name">${escapeHtml(p.name)}</div>
+      <div class="seat-name">${p.isBot ? '<i class="fa-solid fa-robot seat-bot-icon" title="' + t('seat_bot_title') + '"></i> ' : ''}${escapeHtml(p.name)}</div>
       <div class="seat-badges">
         ${p.isMe ? `<span class="me-badge">${t('seat_me_badge')}</span>` : ''}
         ${isHostSeat ? `<span class="host-badge" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></span>` : ''}
         ${p.excluded ? `<span class="excluded-badge" title="${t('seat_excluded_title')}"><i class="fa-solid fa-user-slash"></i></span>` : ''}
       </div>
+      ${showBotControls && p.isBot ? `<button class="seat-remove-bot-btn" data-player-id="${p.id}" title="${t('seat_remove_bot_title')}"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>`;
   }
 
@@ -2302,7 +2313,7 @@
             ${sceneBackdropHtml('bunker')}
             <div class="rules-title"><i class="fa-solid fa-signature"></i> ${t('lobby_bunker_slots_title')}</div>
             <div class="seat-grid" id="seat-grid">
-              ${players.map((p) => seatCellHtml(p, { hostId: room.hostPlayerId, clickable: false })).join('')}
+              ${players.map((p) => seatCellHtml(p, { hostId: room.hostPlayerId, clickable: false, showBotControls: isHost })).join('')}
             </div>
           </div>
 
@@ -2331,6 +2342,33 @@
 
     const startBtn = document.getElementById('lobby-start-btn');
     if (startBtn) startBtn.addEventListener('click', handleStartGame);
+
+    if (isHost) {
+      document.querySelectorAll('.seat-add-bot-btn').forEach((btn) => {
+        btn.addEventListener('click', () => handleAddBot(Number(btn.dataset.slot)));
+      });
+      document.querySelectorAll('.seat-remove-bot-btn').forEach((btn) => {
+        btn.addEventListener('click', () => handleRemoveBot(Number(btn.dataset.playerId)));
+      });
+    }
+  }
+
+  async function handleAddBot(slot) {
+    try {
+      await api('post', `/${session.code}/add-bot`, { slot });
+      await pollOnce();
+    } catch (e) {
+      showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation');
+    }
+  }
+
+  async function handleRemoveBot(playerId) {
+    try {
+      await api('post', `/${session.code}/remove-bot`, { playerId });
+      await pollOnce();
+    } catch (e) {
+      showToast(t('toast_error_title'), errorMessageFrom(e), 'fa-triangle-exclamation');
+    }
   }
 
   async function handleStartGame() {
@@ -2604,7 +2642,7 @@
               </div>
             ` : ''}
             <div class="card-face-body">
-              <div class="card-face-name">${escapeHtml(p.name)}</div>
+              <div class="card-face-name">${p.isBot ? `<i class="fa-solid fa-robot card-bot-icon" title="${t('seat_bot_title')}"></i> ` : ''}${escapeHtml(p.name)}</div>
               <div class="card-face-profession">${escapeHtml(tc(p.profession || ''))}</div>
               <div class="card-face-dots">
                 ${ATTR_FIELDS.map((f) => `<span class="card-face-dot ${p.revealed && p.revealed[f.key] ? 'lit' : ''}"></span>`).join('')}
@@ -2618,7 +2656,7 @@
             <div class="player-card-head">
               <div class="player-avatar">${initial}</div>
               <div class="player-name-static">
-                ${escapeHtml(p.name)}
+                ${p.isBot ? `<i class="fa-solid fa-robot card-bot-icon" title="${t('seat_bot_title')}"></i> ` : ''}${escapeHtml(p.name)}
                 ${isMe ? `<span class="me-badge">${t('seat_me_badge')}</span>` : ''}
                 ${isHostSeat ? `<span class="host-badge" title="${t('seat_host_title')}"><i class="fa-solid fa-crown"></i></span>` : ''}
               </div>
@@ -2743,7 +2781,7 @@
             return `
               <div class="voting-row ${isLeader ? 'is-leader' : ''} ${isTarget ? 'is-my-target' : ''}">
                 <div class="voting-name">
-                  <i class="fa-solid fa-user"></i> ${escapeHtml(p.name)}
+                  <i class="fa-solid ${p.isBot ? 'fa-robot' : 'fa-user'}"></i> ${escapeHtml(p.name)}
                   ${p.isMe ? ` <span class="me-badge">${t('seat_me_badge')}</span>` : ''}
                   ${hasVoted ? `<i class="fa-solid fa-check voting-cast-check" title="${t('voting_progress_label')}"></i>` : ''}
                 </div>

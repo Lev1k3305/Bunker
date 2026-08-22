@@ -2293,6 +2293,55 @@ input[type="range"]::-moz-range-thumb {
   font-size: 12px;
 }
 
+/* Боты: кнопки управления в лобби + иконка-бейдж на местах/карточках */
+.seat-add-bot-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-metal);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, transform .15s ease;
+}
+.seat-add-bot-btn:hover {
+  border-color: var(--rust-light);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+.seat-cell.taken.is-bot {
+  border-style: dashed;
+}
+.seat-bot-icon,
+.card-bot-icon {
+  color: var(--toxic);
+  font-size: 0.85em;
+}
+.seat-remove-bot-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border-metal);
+  background: var(--bg-black);
+  color: var(--danger-light);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.seat-remove-bot-btn:hover {
+  border-color: var(--danger-light);
+}
+
 .name-claim-panel {
   max-width: 420px;
   margin: 16px auto 0;

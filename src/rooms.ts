@@ -10,8 +10,9 @@ import {
   randomCatastrophe, randomBunkerParams, randomEvent, randomSituation,
   type BunkerParams,
 } from './data'
+import { addBotToRoom, removeBotFromRoom, runBotRoundActions, runBotVoteActions, maybeBotChatReaction, type BotEnv } from './bots'
 
-type Bindings = { DB: D1Database }
+type Bindings = { DB: D1Database; GROQ_API_KEY?: string; GROQ_MODEL?: string }
 
 const ATTR_FIELDS = [
   'ageGender', 'health', 'hobby', 'phobia',
@@ -72,6 +73,7 @@ function rowToPlayerPublic(row: any) {
     name: row.name || `Игрок ${row.slot}`,
     claimed: !!row.claimed,
     excluded: !!row.excluded,
+    isBot: !!row.is_bot,
     profession: row.profession, // профессия всегда видна всем сразу
     revealed: {},
   };
@@ -94,6 +96,7 @@ function rowToPlayerPrivate(row: any) {
     name: row.name || `Игрок ${row.slot}`,
     claimed: !!row.claimed,
     excluded: !!row.excluded,
+    isBot: !!row.is_bot,
     profession: row.profession,
     ageGender: row.age_gender,
     health: row.health,
@@ -334,6 +337,48 @@ rooms.post('/:code/join', async (c) => {
 });
 
 // ---------------------------------------------------------------------
+// Боты: добавление / удаление (только хост, только в лобби)
+// ---------------------------------------------------------------------
+
+rooms.post('/:code/add-bot', async (c) => {
+  const db = c.env.DB;
+  const code = c.req.param('code').toUpperCase();
+  const token = c.req.header('X-Player-Token') || '';
+  const body = await c.req.json().catch(() => ({}));
+  const slot = body?.slot ? Number(body.slot) : undefined;
+
+  const room = await getRoom(db, code);
+  if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status !== 'lobby') return c.json({ error: 'not_in_lobby' }, 400);
+  const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
+  if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
+
+  const result = await addBotToRoom(db, code, slot);
+  if ('error' in result) return c.json(result, 400);
+
+  return c.json({ ok: true, botId: result.botId, botName: result.botName, slot: result.slot });
+});
+
+rooms.post('/:code/remove-bot', async (c) => {
+  const db = c.env.DB;
+  const code = c.req.param('code').toUpperCase();
+  const token = c.req.header('X-Player-Token') || '';
+  const body = await c.req.json().catch(() => ({}));
+  const playerId = Number(body?.playerId);
+
+  const room = await getRoom(db, code);
+  if (!room) return c.json({ error: 'room_not_found' }, 404);
+  if (room.status !== 'lobby') return c.json({ error: 'not_in_lobby' }, 400);
+  const requester = await db.prepare('SELECT * FROM players WHERE room_code = ? AND token = ?').bind(code, token).first();
+  if (!requester || (requester as any).id !== room.host_player_id) return c.json({ error: 'only_host' }, 403);
+
+  const result = await removeBotFromRoom(db, code, playerId);
+  if ('error' in result) return c.json(result, 400);
+
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------
 // Получение состояния (для polling)
 // ---------------------------------------------------------------------
 
@@ -398,7 +443,7 @@ rooms.post('/:code/start', async (c) => {
     const row = playerRows[i];
     batch.push(
       db.prepare(
-        `UPDATE players SET profession=?, age_gender=?, health=?, hobby=?, phobia=?, trait_positive=?, trait_negative=?, inventory=?, extra_info=?, revealed_json='{}', excluded=0 WHERE id=?`
+        `UPDATE players SET profession=?, age_gender=?, health=?, hobby=?, phobia=?, trait_positive=?, trait_negative=?, inventory=?, extra_info=?, revealed_json='{}', excluded=0, bot_last_round_acted=0, bot_last_vote_id=0 WHERE id=?`
       ).bind(
         professions[i], ageGenders[i], healths[i], hobbies[i], phobias[i],
         traitsPos[i], traitsNeg[i], inventories[i], extras[i], row.id
@@ -583,6 +628,14 @@ rooms.post('/:code/next-round', async (c) => {
 
   await addSystemMessage(db, code, `⏱ Раунд ${newRound} начался. Событие: ${event}`);
 
+  // Ходы ботов (авто-раскрытие характеристики + возможная реплика в чат) —
+  // выполняются синхронно как побочный эффект запроса хоста, без фоновых процессов.
+  try {
+    await runBotRoundActions(db, c.env as unknown as BotEnv, code);
+  } catch {
+    // ошибки ботов не должны ломать основной игровой процесс
+  }
+
   return c.json({ ok: true, round: newRound, event, timer });
 });
 
@@ -684,7 +737,17 @@ rooms.post('/:code/vote/start', async (c) => {
   await db.prepare(`UPDATE rooms SET timer_json=? WHERE code=?`).bind(JSON.stringify(timer), code).run();
   await addSystemMessage(db, code, `🗳 Голосование за исключение открыто! У вас ${seconds} сек.`);
 
-  return c.json({ ok: true, voteId: (result.meta as any).last_row_id, timer });
+  const voteId = (result.meta as any).last_row_id;
+
+  // Боты голосуют сразу при старте голосования (реактивно, без фонового ожидания
+  // истечения таймера — иначе Workers некому будет "разбудить" их позже).
+  try {
+    await runBotVoteActions(db, c.env as unknown as BotEnv, code, voteId);
+  } catch {
+    // ошибки ботов не должны ломать голосование
+  }
+
+  return c.json({ ok: true, voteId, timer });
 });
 
 rooms.post('/:code/vote/cast', async (c) => {
@@ -810,6 +873,16 @@ rooms.post('/:code/chat', async (c) => {
     `INSERT INTO chat_messages (room_code, player_id, player_name, type, text) VALUES (?, ?, ?, 'chat', ?)`
   ).bind(code, (me as any).id, (me as any).name, text).run();
 
+  // С небольшой вероятностью один из живых ботов реагирует репликой в чат,
+  // чтобы обсуждение не выглядело мёртвым между раундами.
+  if (!(me as any).is_bot) {
+    try {
+      await maybeBotChatReaction(db, c.env as unknown as BotEnv, code);
+    } catch {
+      // необязательная реакция — ошибки игнорируем
+    }
+  }
+
   return c.json({ ok: true });
 });
 
@@ -832,7 +905,7 @@ rooms.post('/:code/reset', async (c) => {
   ).bind(code).run();
 
   await db.prepare(
-    `UPDATE players SET profession=NULL, age_gender=NULL, health=NULL, hobby=NULL, phobia=NULL, trait_positive=NULL, trait_negative=NULL, inventory=NULL, extra_info=NULL, revealed_json='{}', excluded=0 WHERE room_code=?`
+    `UPDATE players SET profession=NULL, age_gender=NULL, health=NULL, hobby=NULL, phobia=NULL, trait_positive=NULL, trait_negative=NULL, inventory=NULL, extra_info=NULL, revealed_json='{}', excluded=0, bot_last_round_acted=0, bot_last_vote_id=0 WHERE room_code=?`
   ).bind(code).run();
 
   await db.prepare(`DELETE FROM votes WHERE room_code=?`).bind(code).run();
