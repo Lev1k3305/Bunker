@@ -6,13 +6,16 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "webapp-production",
-      "database_id": "local-placeholder-id"
-    }
-  ],
+  // ВРЕМЕННО отключено: у текущего Cloudflare API-токена нет прав на D1.
+  // Как только права будут добавлены (Account -> D1 -> Edit) и база создана,
+  // нужно вернуть этот блок с реальным database_id.
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "webapp-production",
+  //     "database_id": "local-placeholder-id"
+  //   }
+  // ],
   "vars": {
     // Несекретная настройка модели Groq для ботов. Сам ключ GROQ_API_KEY
     // хранится ТОЛЬКО как секрет: локально в .dev.vars (не коммитится),
