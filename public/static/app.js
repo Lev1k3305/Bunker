@@ -1238,6 +1238,10 @@
       { freq: 330, start: 0, dur: 0.09, type: 'triangle', gain: 0.45 },
       { freq: 494, start: 0.06, dur: 0.12, type: 'triangle', gain: 0.5 },
     ]),
+    cardFlip: () => playTones([
+      { freq: 260, start: 0, dur: 0.09, type: 'triangle', gain: 0.28 },
+      { freq: 520, start: 0.09, dur: 0.14, type: 'sine', gain: 0.32 },
+    ]),
   };
 
   function playSfx(name) {
@@ -2979,8 +2983,16 @@
       const card = document.getElementById(`card-${targetId}`);
       const isNowFlipped = flippedCardIds.has(targetId);
       if (isNowFlipped) { flippedCardIds.delete(targetId); } else { flippedCardIds.add(targetId); }
-      if (card) card.classList.toggle('is-flipped', !isNowFlipped);
-      playSfx('click');
+      if (card) {
+        card.classList.toggle('is-flipped', !isNowFlipped);
+        // Класс "is-flipping" включает блик/усиленную тень только на время
+        // самого поворота (длительность синхронизирована с transition в CSS),
+        // затем снимается — чтобы не мешать наведению на статичную карточку.
+        card.classList.add('is-flipping');
+        clearTimeout(card._flipTimeout);
+        card._flipTimeout = setTimeout(() => card.classList.remove('is-flipping'), 700);
+      }
+      playSfx('cardFlip');
       return;
     }
     const rerollBtn = e.target.closest('[data-action="reroll"]');

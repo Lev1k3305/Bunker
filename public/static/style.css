@@ -1002,18 +1002,25 @@ input[type="range"]::-moz-range-thumb {
 
 /* Карточка игрока — досье (обёртка внутри флип-контейнера) */
 .player-card {
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   position: relative;
   border: 1px solid var(--border-metal);
   background: linear-gradient(170deg, var(--bg-card), #16140f);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.4),
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 -1px 0 rgba(0,0,0,0.5) inset;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.25s ease;
   height: 100%;
 }
 
 .player-card:hover {
   border-color: var(--border-rust);
-  box-shadow: 0 10px 26px rgba(0,0,0,0.5);
+  box-shadow:
+    0 14px 34px rgba(0,0,0,0.55),
+    0 1px 0 rgba(255,255,255,0.06) inset,
+    0 -1px 0 rgba(0,0,0,0.5) inset;
 }
 
 .player-card.excluded {
@@ -1034,18 +1041,27 @@ input[type="range"]::-moz-range-thumb {
    ===================================================================== */
 
 .player-card-flip {
-  perspective: 1400px;
+  perspective: 1800px;
   min-height: 360px;
+  /* Тень-«подложка» под карточкой — растёт и мягчает во время переворота,
+     создавая иллюзию, что карточка физически приподнимается со стола. */
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.35));
+  transition: filter 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .players-arena-center .player-card-flip { min-height: 420px; }
+
+.player-card-flip.is-flipping {
+  filter: drop-shadow(0 34px 48px rgba(0,0,0,0.55));
+}
 
 .player-card-flip-inner {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 360px;
-  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.7s cubic-bezier(0.34, 1.18, 0.36, 1);
   transform-style: preserve-3d;
+  will-change: transform;
 }
 .players-arena-center .player-card-flip-inner { min-height: 420px; }
 
@@ -1059,13 +1075,40 @@ input[type="range"]::-moz-range-thumb {
   inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* Небольшой z-смещение убирает z-fighting/просвечивание граней в некоторых браузерах */
+  transform: translateZ(0.5px);
 }
 
 .player-card-flip .player-card-back {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(0.5px);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+}
+
+/* Блик, скользящий по карточке в момент переворота — усиливает ощущение
+   объёмной, «глянцевой» поверхности, которая ловит свет при повороте. */
+.player-card-flip .player-card-face::after,
+.player-card-flip .player-card-back::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(75deg, transparent 30%, rgba(255,255,255,0.10) 48%, rgba(255,255,255,0.02) 52%, transparent 70%);
+  background-size: 260% 260%;
+  background-position: 140% 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.25s ease;
+}
+.player-card-flip.is-flipping .player-card-face::after,
+.player-card-flip.is-flipping .player-card-back::after {
+  opacity: 1;
+  animation: card-flip-glare 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes card-flip-glare {
+  0% { background-position: 160% 0; }
+  100% { background-position: -60% 0; }
 }
 
 /* --- Лицевая сторона: тёмный плакат-силуэт, вдохновлённый ролевыми карточками --- */
@@ -3016,6 +3059,18 @@ input[type="range"]::-moz-range-thumb {
 
 @media (prefers-reduced-motion: reduce) {
   .ambient-particles { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-card-flip,
+  .player-card-flip-inner {
+    transition: none !important;
+  }
+  .player-card-flip.is-flipping .player-card-face::after,
+  .player-card-flip.is-flipping .player-card-back::after {
+    animation: none !important;
+    opacity: 0 !important;
+  }
 }
 
 /* =====================================================================
