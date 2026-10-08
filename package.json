@@ -6,12 +6,23 @@
     "build": "vite build",
     "preview": "wrangler pages dev",
     "deploy": "npm run build && wrangler pages deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "cap:prepare": "mkdir -p www && cp -r public/* www/ && npx cap sync",
+    "cap:build-apk": "npm run cap:prepare && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "hono": "^4.12.27"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.25.2",

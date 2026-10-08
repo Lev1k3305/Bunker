@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>SHELTER — сетевая игра на выживание</title>
+    <link rel="icon" type="image/svg+xml" href="static/favicon.svg" />
+    <meta name="description" content="SHELTER — сетевая игра на выживание: генератор персонажей, катастроф и параметров убежища, каждый игрок со своего устройства." />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet" />
+
+    <!-- Стили -->
+    <link href="static/style.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="loading-screen" id="loading-screen">
+        <div class="loading-content">
+          <div class="loading-ring">
+            <i class="fa-solid fa-radiation loading-icon"></i>
+          </div>
+          <div class="loading-text">SHELTER</div>
+          <div class="loading-subtext">сетевая игра на выживание</div>
+          <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="static/app.js"></script>
+  </body>
+</html>
